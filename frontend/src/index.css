@@ -1,0 +1,94 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Paleta institucional Kinevia — ver Identidade-Visual.md */
+
+    --background: 216 33% 97%;       /* Cinza Claro #F5F7FA — organização */
+    --foreground: 215 28% 17%;       /* Grafite #1F2937 — textos */
+
+    --card: 0 0% 100%;               /* Branco #FFFFFF — clareza */
+    --card-foreground: 215 28% 17%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 28% 17%;
+
+    /* Primária: Azul Profundo #1E3A5F — confiança */
+    --primary: 214 52% 24%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Turquesa #2CBFAE — movimento (destaque secundário) */
+    --turquesa: 173 62% 45%;
+    --turquesa-foreground: 0 0% 100%;
+
+    /* Verde Claro #63D391 — recuperação (sucesso/compareceu) */
+    --verde-claro: 145 56% 61%;
+    --verde-claro-foreground: 215 28% 17%;
+
+    --secondary: 216 33% 94%;
+    --secondary-foreground: 215 28% 17%;
+    --muted: 216 33% 94%;
+    --muted-foreground: 220 9% 46%;  /* Cinza Médio #6B7280 — info secundária */
+    --accent: 216 33% 94%;
+    --accent-foreground: 215 28% 17%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 216 25% 89%;
+    --input: 216 25% 89%;
+    --ring: 214 52% 24%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 215 28% 12%;
+    --foreground: 216 33% 97%;
+    --card: 215 28% 15%;
+    --card-foreground: 216 33% 97%;
+    --popover: 215 28% 15%;
+    --popover-foreground: 216 33% 97%;
+    --primary: 214 52% 45%;
+    --primary-foreground: 0 0% 100%;
+    --turquesa: 173 62% 45%;
+    --turquesa-foreground: 0 0% 100%;
+    --verde-claro: 145 56% 61%;
+    --verde-claro-foreground: 215 28% 17%;
+    --secondary: 215 25% 20%;
+    --secondary-foreground: 216 33% 97%;
+    --muted: 215 25% 20%;
+    --muted-foreground: 220 9% 65%;
+    --accent: 215 25% 20%;
+    --accent-foreground: 216 33% 97%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 216 33% 97%;
+    --border: 215 25% 20%;
+    --input: 215 25% 20%;
+    --ring: 214 52% 45%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+}
+
+/* Fonte do logotipo/marca — usar apenas no nome "Kinevia" */
+.font-logo {
+  font-family: 'Manrope', system-ui, sans-serif;
+}
+
+/* Esconde a barra de rolagem visualmente, mantendo o scroll funcional.
+   Usado no TabsList do perfil do paciente para rolagem horizontal suave
+   quando as abas não cabem em telas estreitas. */
+.scrollbar-none {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge antigo */
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Edge novo */
+}

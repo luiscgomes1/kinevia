@@ -1,5 +1,6 @@
 import express from 'express'
 import cors from 'cors'
+import helmet from 'helmet'
 import 'dotenv/config'
 
 import authRoutes from './routes/auth.routes'
@@ -16,8 +17,19 @@ import financeiroRoutes from './routes/financeiro.routes'
 
 const app = express()
 
-app.use(cors())
-app.use(express.json())
+app.use(helmet())
+
+const origensPermitidas = [
+  'http://localhost:5173',
+  process.env.FRONTEND_URL,
+].filter((origem): origem is string => Boolean(origem))
+
+app.use(cors({
+  origin: origensPermitidas,
+  credentials: true,
+}))
+
+app.use(express.json({ limit: '1mb' }))
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', project: 'FisioGest API' })
@@ -34,6 +46,12 @@ app.use('/pacotes', pacoteItemRoutes)
 app.use('/pacientes/:id', laudoRoutes)
 app.use('/laudos', laudoItemRoutes)
 app.use('/financeiro', financeiroRoutes)
+
+app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('Erro não tratado:', err)
+
+  res.status(500).json({ error: 'Erro interno do servidor' })
+})
 
 const PORT = process.env.PORT || 3333
 
