@@ -6,6 +6,7 @@ import {
     buscarLaudo,
     editarLaudo,
     gerarPDF,
+    gerarDeclaracaoSessoes,
 } from '../controllers/laudo.controller'
 
 const router = Router()
@@ -13,5 +14,6 @@ const router = Router()
 router.get('/:id', authenticate, buscarLaudo)
 router.put('/:id', authenticate, validar(editarLaudoSchema), editarLaudo)
 router.get('/:id/pdf', authenticate, gerarPDF)
+router.get('/:id/declaracao-sessoes', authenticate, gerarDeclaracaoSessoes)
 
 export default router

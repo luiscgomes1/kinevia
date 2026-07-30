@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
+import { createPortal } from 'react-dom'
+import { useParams, useNavigate, useSearchParams, useBlocker } from 'react-router-dom'
 import {
     ArrowLeft, Phone, Mail, MapPin, Calendar,
     UserX, UserCheck, Pencil, Loader2
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import api from '@/services/api'
+import api, { exibirErro } from '@/services/api'
 import ProntuarioTab from './abas/Prontuario'
 import SessoesTab from './abas/Sessoes'
 import LaudosTab from './abas/Laudos'
@@ -39,7 +41,7 @@ function calcularIdade(dataNascimento: string): number {
 }
 
 function formatarData(data: string): string {
-    return new Date(data).toLocaleDateString('pt-BR', { timeZone: 'UTC' })
+    return new Date(data).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
 }
 
 export default function PerfilPacientePage() {
@@ -52,8 +54,24 @@ export default function PerfilPacientePage() {
     const [paciente, setPaciente] = useState<Paciente | null>(null)
     const [carregando, setCarregando] = useState(true)
     const [alterandoStatus, setAlterandoStatus] = useState(false)
+    const [prontuarioDirty, setProntuarioDirty] = useState(false)
+    const [prontuarioKey, setProntuarioKey] = useState(0)
+    const [showTabConfirm, setShowTabConfirm] = useState(false)
+    const [pendingTab, setPendingTab] = useState<string | null>(null)
+    const navBlocker = useBlocker(
+      ({ currentLocation, nextLocation }) =>
+        prontuarioDirty && currentLocation.pathname !== nextLocation.pathname
+    )
+
+    const showNavConfirm = navBlocker.state === 'blocked'
 
     function handleMudarAba(novaAba: string) {
+        const abaAtual = searchParams.get('aba') || 'prontuario'
+        if (prontuarioDirty && abaAtual === 'prontuario' && novaAba !== 'prontuario') {
+            setPendingTab(novaAba)
+            setShowTabConfirm(true)
+            return
+        }
         setSearchParams({ aba: novaAba })
     }
 
@@ -82,8 +100,8 @@ export default function PerfilPacientePage() {
                 await api.patch(`/pacientes/${paciente.id}/reativar`)
                 setPaciente({ ...paciente, ativo: true })
             }
-        } catch {
-            // silencioso
+        } catch (err) {
+            toast.error(exibirErro(err, 'Erro ao alterar status do paciente.'))
         } finally {
             setAlterandoStatus(false)
         }
@@ -234,7 +252,7 @@ export default function PerfilPacientePage() {
 
                     <div className="px-4 sm:px-6 pb-6">
                         <TabsContent value="prontuario">
-                            <ProntuarioTab pacienteId={paciente.id} />
+                            <ProntuarioTab key={prontuarioKey} pacienteId={paciente.id} onDirtyChange={setProntuarioDirty} />
                         </TabsContent>
 
                         <TabsContent value="sessoes">
@@ -251,6 +269,68 @@ export default function PerfilPacientePage() {
                     </div>
                 </Tabs>
             </div>
+
+            {showTabConfirm && createPortal(
+                <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/40">
+                    <div className="bg-card rounded-xl shadow-2xl border border-border p-6 max-w-sm w-full mx-4">
+                        <h2 className="text-lg font-semibold text-foreground">Descartar alterações?</h2>
+                        <p className="text-sm text-muted-foreground mt-2">
+                            Você tem alterações não salvas no prontuário. Deseja realmente descartá-las?
+                        </p>
+                        <div className="mt-6 flex items-center justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setShowTabConfirm(false)}
+                                className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                                Continuar editando
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    if (pendingTab) setSearchParams({ aba: pendingTab })
+                                    setShowTabConfirm(false)
+                                    setPendingTab(null)
+                                    setProntuarioDirty(false)
+                                    setProntuarioKey((k) => k + 1)
+                                }}
+                                className="px-4 py-2 text-sm font-medium text-white bg-destructive hover:bg-destructive/90 rounded-lg transition-colors"
+                            >
+                                Descartar
+                            </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+
+            {showNavConfirm && createPortal(
+                <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/40">
+                    <div className="bg-card rounded-xl shadow-2xl border border-border p-6 max-w-sm w-full mx-4">
+                        <h2 className="text-lg font-semibold text-foreground">Descartar alterações?</h2>
+                        <p className="text-sm text-muted-foreground mt-2">
+                            Você tem alterações não salvas no prontuário. Deseja realmente sair?
+                        </p>
+                        <div className="mt-6 flex items-center justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={() => { if (navBlocker.state === 'blocked') navBlocker.reset() }}
+                                className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                                Continuar editando
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => { if (navBlocker.state === 'blocked') navBlocker.proceed() }}
+                                className="px-4 py-2 text-sm font-medium text-white bg-destructive hover:bg-destructive/90 rounded-lg transition-colors"
+                            >
+                                Sair
+                            </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
         </div>
     )
 }

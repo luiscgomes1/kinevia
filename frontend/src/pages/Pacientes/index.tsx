@@ -1,10 +1,12 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { Search, UserPlus, UserCheck, UserX, ChevronRight } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { toast } from 'sonner'
 import api from '@/services/api'
+import { exibirErro } from '@/services/api'
 import { formatarTelefone } from '@/lib/masks'
 
 interface Paciente {
@@ -22,25 +24,28 @@ export default function PacientesPage() {
   const [incluirInativos, setIncluirInativos] = useState(false)
   const [carregando, setCarregando] = useState(true)
 
-  const carregarPacientes = useCallback(async () => {
-    setCarregando(true)
-    try {
-      const params = new URLSearchParams()
-      if (busca) params.set('busca', busca)
-      if (incluirInativos) params.set('incluirInativos', 'true')
-      const response = await api.get(`/pacientes?${params.toString()}`)
-      setPacientes(response.data)
-    } catch {
-      // silencioso por enquanto
-    } finally {
-      setCarregando(false)
+  useEffect(() => {
+    const controller = new AbortController()
+    const timeout = setTimeout(async () => {
+      setCarregando(true)
+      try {
+        const params = new URLSearchParams()
+        if (busca) params.set('busca', busca)
+        if (incluirInativos) params.set('incluirInativos', 'true')
+        const response = await api.get(`/pacientes?${params.toString()}`, { signal: controller.signal })
+        setPacientes(response.data)
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return
+        toast.error(exibirErro(err, 'Erro ao carregar pacientes.'))
+      } finally {
+        setCarregando(false)
+      }
+    }, 300)
+    return () => {
+      controller.abort()
+      clearTimeout(timeout)
     }
   }, [busca, incluirInativos])
-
-  useEffect(() => {
-    const timeout = setTimeout(carregarPacientes, 300)
-    return () => clearTimeout(timeout)
-  }, [carregarPacientes])
 
   return (
     <div className="space-y-5">

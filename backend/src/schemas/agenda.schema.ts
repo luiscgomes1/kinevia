@@ -25,6 +25,15 @@ export const criarAgendamentoSchema = z.object({
     tipo: z.enum(['AVALIACAO', 'SESSAO', 'REPOSICAO']).optional(),
 })
 
+export const buscarAgendaDiaSchema = z.object({
+  data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato deve ser YYYY-MM-DD.'),
+})
+
+export const resumoMesSchema = z.object({
+  ano: z.string().regex(/^\d{4}$/, 'Ano deve ter 4 dígitos.'),
+  mes: z.string().regex(/^(1[0-2]|[1-9])$/, 'Mês deve ser 1-12.'),
+})
+
 export const atualizarStatusSchema = z.object({
     status: z.enum(['AGENDADO', 'COMPARECEU', 'FALTOU', 'DESMARCOU'], {
         errorMap: () => ({ message: 'Status inválido. Use: AGENDADO, COMPARECEU, FALTOU ou DESMARCOU.' }),

@@ -4,28 +4,41 @@ import {
   Users,
   DollarSign,
   Settings,
+  BarChart3,
   LogOut,
   Menu,
   X,
+  Moon,
+  Sun,
 } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import logoKinevia from '@/assets/logo-kinevia-2.png'
+import api, { clearAccessToken } from '@/services/api'
+import { clearProfissionalCache } from '@/hooks/useProfissional'
+import { useTheme } from '@/components/ThemeProvider'
 
 const itensNav = [
   { label: 'Agenda', icone: CalendarDays, href: '/agenda' },
   { label: 'Pacientes', icone: Users, href: '/pacientes' },
   { label: 'Financeiro', icone: DollarSign, href: '/financeiro' },
+  { label: 'Relatórios', icone: BarChart3, href: '/relatorios' },
   { label: 'Configurações', icone: Settings, href: '/configuracoes' },
 ]
 
 export default function Layout() {
   const navigate = useNavigate()
   const [menuAberto, setMenuAberto] = useState(false)
+  const { theme, toggleTheme } = useTheme()
 
-  function handleLogout() {
-    localStorage.removeItem('accessToken')
-    localStorage.removeItem('refreshToken')
+  async function handleLogout() {
+    try {
+      await api.post('/auth/logout')
+    } catch {
+      // falha no logout remoto não impede logout local
+    }
+    clearAccessToken()
+    clearProfissionalCache()
     navigate('/login')
   }
 
@@ -68,8 +81,16 @@ export default function Layout() {
           ))}
         </nav>
 
-        {/* Rodapé da sidebar — logout */}
-        <div className="px-3 py-4 border-t border-border">
+        {/* Rodapé da sidebar — tema + logout */}
+        <div className="px-3 py-4 border-t border-border space-y-1">
+          <button
+            onClick={toggleTheme}
+            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors w-full"
+            title={theme === 'light' ? 'Modo escuro' : 'Modo claro'}
+          >
+            {theme === 'light' ? <Moon className="w-4 h-4 shrink-0" /> : <Sun className="w-4 h-4 shrink-0" />}
+            {theme === 'light' ? 'Modo escuro' : 'Modo claro'}
+          </button>
           <button
             onClick={handleLogout}
             className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-red-50 hover:text-red-600 transition-colors w-full"
@@ -123,7 +144,14 @@ export default function Layout() {
                 {label}
               </NavLink>
             ))}
-            <div className="pt-2 border-t border-border mt-2">
+            <div className="pt-2 border-t border-border mt-2 space-y-1">
+              <button
+                onClick={toggleTheme}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-accent transition-colors w-full"
+              >
+                {theme === 'light' ? <Moon className="w-4 h-4 shrink-0" /> : <Sun className="w-4 h-4 shrink-0" />}
+                {theme === 'light' ? 'Modo escuro' : 'Modo claro'}
+              </button>
               <button
                 onClick={handleLogout}
                 className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-red-50 hover:text-red-600 transition-colors w-full"
@@ -137,7 +165,7 @@ export default function Layout() {
       )}
 
       {/* ── Conteúdo principal ──────────────────────────── */}
-      <main className="flex-1 md:ml-56 pt-0 md:pt-0">
+      <main className="flex-1 md:ml-56 pt-0 md:pt-0 min-w-0">
         {/* Espaço para o header mobile */}
         <div className="md:hidden h-[57px]" />
         {/* pb-24 no mobile reserva espaço para a bottom navigation fixa não cobrir o final do conteúdo */}

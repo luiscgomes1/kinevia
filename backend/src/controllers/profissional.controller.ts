@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import prisma from '../lib/prisma';
+import { gerarUrlAssinada } from '../lib/supabase';
 
 export async function buscarPerfil(req: Request, res: Response) {
 
@@ -13,7 +14,8 @@ export async function buscarPerfil(req: Request, res: Response) {
             crefito: true,
             cidade: true,
             uf: true,
-            assinatura_url: true,
+            assinatura_path: true,
+            logo_path: true,
             horario_inicio: true,
             horario_fim: true,
             preco_sessao_individual: true,
@@ -26,7 +28,17 @@ export async function buscarPerfil(req: Request, res: Response) {
         return res.status(404).json({ erro: 'Profissional não encontrado' });
     }
 
-    res.json(profissional);
+    // Ver ADR-006: o banco guarda só o caminho no bucket privado — o link
+    // assinado (temporário) é gerado aqui, na hora, pra exibição no frontend.
+    // Nunca persistimos a URL assinada em si, porque ela expira.
+    const [assinatura_url, logo_url] = await Promise.all([
+        profissional.assinatura_path ? gerarUrlAssinada(profissional.assinatura_path) : null,
+        profissional.logo_path ? gerarUrlAssinada(profissional.logo_path) : null,
+    ])
+
+    const { assinatura_path, logo_path, ...resto } = profissional
+
+    res.json({ ...resto, assinatura_url, logo_url });
 }
 
 export async function atualizarPerfil(req: Request, res: Response) {
@@ -66,14 +78,6 @@ export async function atualizarPerfil(req: Request, res: Response) {
 export async function trocarSenha(req: Request, res: Response) {
     const { senhaAtual, novaSenha } = req.body;
 
-    if(!senhaAtual || !novaSenha) {
-        return res.status(400).json({ erro: 'Senha atual e nova senha são obrigatórias' });
-    }
-
-    if(novaSenha.length < 6) {
-        return res.status(400).json({ erro: 'A nova senha deve ter pelo menos 6 caracteres' });
-    }
-
     const profissional = await prisma.profissional.findUnique({
         where: { id: req.profissionalId }
     });
@@ -92,8 +96,23 @@ export async function trocarSenha(req: Request, res: Response) {
 
     await prisma.profissional.update({
         where: { id: req.profissionalId },
-        data: { senha_hash: novoHash }
+        data: { senha_hash: novoHash, token_version: { increment: 1 } }
     });
 
     return res.json({ mensagem: 'Senha atualizada com sucesso' });
+}
+
+export async function verificarSenha(req: Request, res: Response) {
+    const { senha } = req.body;
+
+    const profissional = await prisma.profissional.findUnique({
+        where: { id: req.profissionalId }
+    });
+
+    if (!profissional) {
+        return res.status(404).json({ erro: 'Profissional não encontrado' });
+    }
+
+    const valida = await bcrypt.compare(senha, profissional.senha_hash);
+    return res.json({ valida });
 }

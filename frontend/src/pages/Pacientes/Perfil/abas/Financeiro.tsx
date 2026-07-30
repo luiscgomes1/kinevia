@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, memo } from 'react'
 import { CheckCircle2, Clock, DollarSign, Package } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { toast } from 'sonner'
 import api from '@/services/api'
+import { exibirErro } from '@/services/api'
 
 interface Pacote {
   id: string
@@ -23,7 +25,7 @@ interface ResumoFinanceiro {
 }
 
 function formatarData(data: string): string {
-  return new Date(data).toLocaleDateString('pt-BR', { timeZone: 'UTC' })
+  return new Date(data).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
 }
 
 function labelTipo(tipo: Pacote['tipo']): string {
@@ -35,25 +37,22 @@ interface Props {
   pacienteId: string
 }
 
-export default function FinanceiroTab({ pacienteId }: Props) {
+const FinanceiroTab = memo(function FinanceiroTab({ pacienteId }: Props) {
   const [resumo, setResumo] = useState<ResumoFinanceiro | null>(null)
   const [carregando, setCarregando] = useState(true)
 
   const carregar = useCallback(async () => {
     try {
-      const response = await api.get('/financeiro/pacientes')
-      const lista: ResumoFinanceiro[] = response.data.pacientes
-      const paciente = lista.find((p) => p.paciente_id === pacienteId)
-      setResumo(paciente || null)
-    } catch {
-      // silencioso
+      const response = await api.get(`/financeiro/pacientes/${pacienteId}`)
+      setResumo(response.data)
+    } catch (err) {
+      toast.error(exibirErro(err, 'Erro ao carregar dados financeiros.'))
     } finally {
       setCarregando(false)
     }
   }, [pacienteId])
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     carregar()
   }, [carregar])
 
@@ -153,4 +152,6 @@ export default function FinanceiroTab({ pacienteId }: Props) {
       </div>
     </div>
   )
-}
+})
+
+export default FinanceiroTab

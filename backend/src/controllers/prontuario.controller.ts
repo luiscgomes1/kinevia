@@ -34,17 +34,22 @@ export async function salvarProntuario(req: Request, res: Response) {
   const {
     medico_solicitante,
     diagnostico_medico,
+    queixa_principal,
     hda,
     hpp_has,
     hpp_dm,
     hpp_ca,
     hpp_cardiopatia,
+    antecedentes_familiares,
     medicacoes,
     habitos_vida,
     exames_medicos,
     avaliacao_fisica,
     diagnostico_fisio,
-    pa,
+      prognostico_fisio,
+      plano_terapeutico,
+      dor_eva,
+      pa,
     fr,
     fc,
     ap,
@@ -63,16 +68,21 @@ export async function salvarProntuario(req: Request, res: Response) {
     update: {
       medico_solicitante,
       diagnostico_medico,
+      queixa_principal,
       hda,
       hpp_has,
       hpp_dm,
       hpp_ca,
       hpp_cardiopatia,
+      antecedentes_familiares,
       medicacoes,
       habitos_vida,
       exames_medicos,
       avaliacao_fisica,
       diagnostico_fisio,
+      prognostico_fisio,
+      plano_terapeutico,
+      dor_eva,
       pa,
       fr,
       fc,
@@ -82,16 +92,21 @@ export async function salvarProntuario(req: Request, res: Response) {
       paciente_id: id,
       medico_solicitante,
       diagnostico_medico,
+      queixa_principal,
       hda,
       hpp_has,
       hpp_dm,
       hpp_ca,
       hpp_cardiopatia,
+      antecedentes_familiares,
       medicacoes,
       habitos_vida,
       exames_medicos,
       avaliacao_fisica,
       diagnostico_fisio,
+      prognostico_fisio,
+      plano_terapeutico,
+      dor_eva,
       pa,
       fr,
       fc,
@@ -104,11 +119,7 @@ export async function salvarProntuario(req: Request, res: Response) {
 
 export async function adicionarEvolucao(req: Request, res: Response) {
     const { id } = req.params;
-    const { texto } = req.body;
-
-    if (!texto || texto.trim() === '') {
-        return res.status(400).json({ erro: 'Texto da evolução é obrigatório.' });
-    }
+    const { texto, dor_eva } = req.body;
 
     const paciente = await prisma.paciente.findFirst({
         where: { id, profissional_id: req.profissionalId },
@@ -130,6 +141,7 @@ export async function adicionarEvolucao(req: Request, res: Response) {
         data: {
             prontuario_id: prontuario.id,
             texto: texto.trim(),
+            ...(dor_eva !== undefined && { dor_eva }),
         }
     })
 
@@ -140,35 +152,40 @@ export async function adicionarCorrecao(req: Request, res: Response) {
     const { id } = req.params;
     const { correcao_texto } = req.body;
 
-    if (!correcao_texto || correcao_texto.trim() === '') {
-        return res.status(400).json({ erro: 'Texto da correção é obrigatório.' });
-    }
-
-    const evolucao = await prisma.evolucao.findFirst({
+    const { count } = await prisma.evolucao.updateMany({
         where: {
             id,
+            correcao_texto: null,
             prontuario: {
                 paciente: {
                     profissional_id: req.profissionalId
                 }
             }
-        }
-    });
-
-    if (!evolucao) {
-        return res.status(404).json({ erro: 'Evolução não encontrada.' });
-    }
-
-    if (evolucao.correcao_texto) {
-        return res.status(400).json({ erro: 'Esta evolução já possui uma correção. Não é possível sobescrever uma correção existente.' });
-    }
-
-    const evolucaoAtualizada = await prisma.evolucao.update({
-        where: { id },
+        },
         data: {
             correcao_texto: correcao_texto.trim(),
             correcao_em: new Date(),
         }
+    });
+
+    if (count === 0) {
+        const existe = await prisma.evolucao.findFirst({
+            where: {
+                id,
+                prontuario: {
+                    paciente: {
+                        profissional_id: req.profissionalId
+                    }
+                }
+            },
+            select: { correcao_texto: true }
+        });
+        if (!existe) return res.status(404).json({ erro: 'Evolução não encontrada.' });
+        return res.status(400).json({ erro: 'Esta evolução já possui uma correção. Não é possível sobrescrever uma correção existente.' });
+    }
+
+    const evolucaoAtualizada = await prisma.evolucao.findFirst({
+        where: { id },
     });
 
     return res.json(evolucaoAtualizada);

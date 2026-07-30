@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { z } from "zod";
 import { authenticate } from "../middlewares/auth.middleware";
 import { validar } from "../middlewares/validate.middleware";
 import {
@@ -18,7 +19,12 @@ import {
 
 const router = Router();
 
-router.get("/", authenticate, listarPacientes);
+const listarPacientesQuery = z.object({
+  busca: z.string().optional(),
+  incluirInativos: z.enum(['true']).optional(),
+})
+
+router.get("/", authenticate, validar(listarPacientesQuery, 'query'), listarPacientes);
 router.get("/:id", authenticate, buscarPaciente);
 router.post("/", authenticate, validar(criarPacienteSchema), criarPaciente);
 router.put("/:id", authenticate, validar(atualizarPacienteSchema), atualizarPaciente);

@@ -10,20 +10,6 @@ export async function criarPacote(req: Request, res: Response) {
   const { id: paciente_id } = req.params;
   const { tipo, valor_cobrado, status_pagamento, sessoes } = req.body;
 
-  if (!tipo || valor_cobrado === undefined) {
-    return res
-      .status(400)
-      .json({ erro: "Tipo do pacote e valor cobrado são obrigatórios." });
-  }
-
-  if (!["INDIVIDUAL", "PACOTE_5", "PACOTE_10"].includes(tipo)) {
-    return res
-      .status(400)
-      .json({
-        erro: "Tipo de pacote inválido. Opções: INDIVIDUAL, PACOTE COM 5, PACOTE COM 10.",
-      });
-  }
-
   const paciente = await prisma.paciente.findFirst({
     where: { id: paciente_id, profissional_id: req.profissionalId },
   });
@@ -43,8 +29,9 @@ export async function criarPacote(req: Request, res: Response) {
     });
 
     return res.status(201).json(resultado);
-  } catch (erro: any) {
-    return res.status(400).json({ erro: erro.message });
+  } catch (erro: unknown) {
+    const mensagem = erro instanceof Error ? erro.message : 'Erro ao criar pacote.';
+    return res.status(400).json({ erro: mensagem });
   }
 }
 
@@ -102,14 +89,6 @@ export async function adicionarSessao(req: Request, res: Response) {
   const { id: pacote_id } = req.params;
   const { data, horario, slot, tipo } = req.body;
 
-  if (!data || !horario || !slot) {
-    return res
-      .status(400)
-      .json({
-        erro: "Data, horário e slot são obrigatórios para adicionar uma sessão.",
-      });
-  }
-
   const pacote = await prisma.pacote.findFirst({
     where: { id: pacote_id, profissional_id: req.profissionalId },
   });
@@ -127,8 +106,9 @@ export async function adicionarSessao(req: Request, res: Response) {
     });
 
     return res.status(201).json(resultado);
-  } catch (erro: any) {
-    return res.status(400).json({ erro: erro.message });
+  } catch (erro: unknown) {
+    const mensagem = erro instanceof Error ? erro.message : 'Erro ao adicionar sessão.';
+    return res.status(400).json({ erro: mensagem });
   }
 }
 
@@ -136,28 +116,20 @@ export async function marcarPagamento(req: Request, res: Response) {
   const { id } = req.params;
   const { status_pagamento } = req.body;
 
-  if (!["AGUARDANDO", "PAGO"].includes(status_pagamento)) {
-    return res
-      .status(400)
-      .json({
-        erro: "Status de pagamento inválido. Opções: AGUARDANDO, PAGO.",
-      });
-  }
-
-  const pacote = await prisma.pacote.findFirst({
+  const { count } = await prisma.pacote.updateMany({
     where: { id, profissional_id: req.profissionalId },
-  });
-
-  if (!pacote) {
-    return res.status(404).json({ erro: "Pacote não encontrado." });
-  }
-
-  const pacoteAtualizado = await prisma.pacote.update({
-    where: { id },
     data: {
       status_pagamento,
       pago_em: status_pagamento === "PAGO" ? new Date() : null,
     },
+  });
+
+  if (count === 0) {
+    return res.status(404).json({ erro: "Pacote não encontrado." });
+  }
+
+  const pacoteAtualizado = await prisma.pacote.findFirst({
+    where: { id, profissional_id: req.profissionalId },
   });
 
   return res.json(pacoteAtualizado);

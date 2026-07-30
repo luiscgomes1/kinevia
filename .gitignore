@@ -1,0 +1,36 @@
+# ── Dependências ──
+node_modules/
+.pnp
+.pnp.js
+
+# ── Ambiente ──
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env
+
+# ── Build ──
+dist/
+build/
+*.tsbuildinfo
+
+# ── IDE / Editor ──
+.vscode/settings.json
+.vscode/launch.json
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ── Logs ──
+*.log
+npm-debug.log*
+
+# ── Prisma (apenas migrations trackeadas, não o client gerado) ──
+node_modules/.prisma/
+backend/src/generated/
+
+# ── Teste ──
+coverage/

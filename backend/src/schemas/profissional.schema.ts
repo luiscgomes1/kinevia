@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { senhaSchema } from './auth.schema'
 
 const horarioSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, {
     message: 'O horário deve estar no formato HH:mm.'
@@ -10,9 +11,9 @@ const horarioParaMinutos = (valor: string) => {
 }
 
 export const atualizarPerfilSchema = z.object({
-    nome: z.string().trim().min(2, { message: 'O nome é obrigatório e deve ter pelo menos 2 caracteres.' }),
-    crefito: z.string().trim().min(3, { message: 'O CREFITO é obrigatório e deve ter pelo menos 3 caracteres.' }),
-    cidade: z.string().trim().min(2, { message: 'A cidade é obrigatória e deve ter pelo menos 2 caracteres.' }),
+    nome: z.string().trim().min(2, { message: 'O nome é obrigatório e deve ter pelo menos 2 caracteres.' }).max(255),
+    crefito: z.string().trim().min(3, { message: 'O CREFITO é obrigatório e deve ter pelo menos 3 caracteres.' }).max(50),
+    cidade: z.string().trim().min(2, { message: 'A cidade é obrigatória e deve ter pelo menos 2 caracteres.' }).max(255),
     uf: z.string().trim().length(2, { message: 'O estado (UF) é obrigatório e deve ter exatamente 2 caracteres.' }),
     horario_inicio: horarioSchema,
     horario_fim: horarioSchema,
@@ -26,5 +27,9 @@ export const atualizarPerfilSchema = z.object({
 
 export const trocarSenhaSchema = z.object({
     senhaAtual: z.string().min(1, { message: 'A senha atual é obrigatória.' }),
-    novaSenha: z.string().min(6, { message: 'A nova senha deve ter pelo menos 6 caracteres.' }),
+    novaSenha: senhaSchema,
+})
+
+export const verificarSenhaSchema = z.object({
+    senha: z.string().min(1),
 })

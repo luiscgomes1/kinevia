@@ -42,24 +42,29 @@ export async function criarPacoteComSessoes(input: CriarPacoteInput) {
     );
   }
 
-  for (const sessao of sessoes) {
-    const slotOcupado = await prisma.agendamento.findFirst({
-      where: {
-        profissional_id,
-        data: new Date(sessao.data),
-        horario: sessao.horario,
-        slot: sessao.slot,
-      },
-    });
-
-    if (slotOcupado) {
-      throw new Error(
-        `O slot ${sessao.slot} no horário ${sessao.horario} do dia ${sessao.data} já está ocupado para o profissional.`,
-      );
-    }
-  }
-
   const resultado = await prisma.$transaction(async (tx) => {
+    if (sessoes.length > 0) {
+      const conditions = sessoes.map((s) => ({
+        profissional_id,
+        data: new Date(s.data),
+        horario: s.horario,
+        slot: s.slot,
+        status: { not: 'DESMARCOU' as const },
+      }))
+
+      const ocupados = await tx.agendamento.findMany({
+        where: { OR: conditions },
+        select: { data: true, horario: true, slot: true },
+      })
+
+      if (ocupados.length > 0) {
+        const primeiro = ocupados[0]
+        throw new Error(
+          `O slot ${primeiro.slot} no horário ${primeiro.horario} do dia ${primeiro.data.toISOString().split('T')[0]} já está ocupado para o profissional.`,
+        )
+      }
+    }
+
     const pacote = await tx.pacote.create({
       data: {
         paciente_id,
@@ -80,7 +85,7 @@ export async function criarPacoteComSessoes(input: CriarPacoteInput) {
           data: new Date(sessao.data),
           horario: sessao.horario,
           slot: sessao.slot,
-          tipo: (sessao.tipo as any) || "SESSAO",
+          tipo: (sessao.tipo as "AVALIACAO" | "SESSAO" | "REPOSICAO") || "SESSAO",
         },
       });
 
@@ -110,40 +115,38 @@ interface AdicionarSessaoInput {
 export async function adicionarSessaoAoPacote(input: AdicionarSessaoInput) {
   const { pacote_id, profissional_id, paciente_id, sessao } = input;
 
-  const pacote = await prisma.pacote.findUnique({
-    where: { id: pacote_id, profissional_id },
-    include: { sessoes: true },
-  });
-
-  if (!pacote) {
-    throw new Error("Pacote não encontrado para o profissional.");
-  }
-
-  const limite = LIMITE_SESSOES[pacote.tipo as TipoPacote];
-  const sessoesAtuais = pacote.sessoes.length;
-
-  if (sessoesAtuais >= limite) {
-    throw new Error(
-      `O pacote do tipo ${pacote.tipo} já atingiu o limite de ${limite} sessão(ões).`,
-    );
-  }
-
-  const slotOcupado = await prisma.agendamento.findFirst({
-    where: {
-      profissional_id,
-      data: new Date(sessao.data),
-      horario: sessao.horario,
-      slot: sessao.slot,
-    },
-  });
-
-  if (slotOcupado) {
-    throw new Error(
-      `O slot ${sessao.slot} no horário ${sessao.horario} do dia ${sessao.data} já está ocupado para o profissional.`,
-    );
-  }
-
   const resultado = await prisma.$transaction(async (tx) => {
+    const slotOcupado = await tx.agendamento.findFirst({
+      where: {
+        profissional_id,
+        data: new Date(sessao.data),
+        horario: sessao.horario,
+        slot: sessao.slot,
+        status: { not: 'DESMARCOU' },
+      },
+    });
+
+    if (slotOcupado) {
+      throw new Error(
+        `O slot ${sessao.slot} no horário ${sessao.horario} do dia ${sessao.data} já está ocupado para o profissional.`,
+      );
+    }
+    const pacoteAtual = await tx.pacote.findUnique({
+      where: { id: pacote_id },
+      include: { sessoes: true },
+    });
+
+    if (!pacoteAtual) {
+      throw new Error("Pacote não encontrado.");
+    }
+
+    const limite = LIMITE_SESSOES[pacoteAtual.tipo as TipoPacote];
+    if (pacoteAtual.sessoes.length >= limite) {
+      throw new Error(
+        `O pacote do tipo ${pacoteAtual.tipo} já atingiu o limite de ${limite} sessão(ões).`,
+      );
+    }
+
     const agendamento = await tx.agendamento.create({
       data: {
         paciente_id,
@@ -151,7 +154,7 @@ export async function adicionarSessaoAoPacote(input: AdicionarSessaoInput) {
         data: new Date(sessao.data),
         horario: sessao.horario,
         slot: sessao.slot,
-        tipo: (sessao.tipo as any) || "SESSAO",
+        tipo: (sessao.tipo as "AVALIACAO" | "SESSAO" | "REPOSICAO") || "SESSAO",
       },
     });
 

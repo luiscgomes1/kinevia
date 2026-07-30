@@ -1,10 +1,5 @@
 import { z } from 'zod'
-
-const LIMITE_SESSOES_POR_TIPO = {
-    INDIVIDUAL: 1,
-    PACOTE_5: 5,
-    PACOTE_10: 10,
-} as const
+import { LIMITE_SESSOES } from '../services/pacote.service'
 
 const dataSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, {
     message: 'A data é obrigatória e deve estar no formato YYYY-MM-DD.'
@@ -42,7 +37,7 @@ export const criarPacoteSchema = z.object({
         return
     }
 
-    const limite = LIMITE_SESSOES_POR_TIPO[dados.tipo]
+    const limite = LIMITE_SESSOES[dados.tipo]
 
     if (dados.sessoes.length > limite) {
         ctx.addIssue({

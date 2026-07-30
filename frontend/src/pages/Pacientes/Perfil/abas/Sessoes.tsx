@@ -1,19 +1,13 @@
-import { useState, useEffect, useCallback } from 'react'
-import { DayPicker } from 'react-day-picker'
-import { ptBR } from 'date-fns/locale'
-import { Plus, Loader2, Calendar, CheckCircle2, XCircle, MinusCircle, Package, CalendarPlus } from 'lucide-react'
+import { useState, useEffect, useCallback, memo } from 'react'
+import { Calendar, CheckCircle2, XCircle, MinusCircle, Package, CalendarPlus, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import 'react-day-picker/dist/style.css'
+import { toast } from 'sonner'
 import api from '@/services/api'
+import { exibirErro } from '@/services/api'
+import { formatarDataISO } from '@/lib/data'
+import { ModalNovoPacote } from './ModalNovoPacote'
+import { ModalAgendarSessao } from './ModalAgendarSessao'
 
 interface Agendamento {
   id: string
@@ -42,33 +36,8 @@ interface Pacote {
   sessoes_limite: number
 }
 
-interface Precos {
-  preco_sessao_individual: number
-  preco_pacote_5: number
-  preco_pacote_10: number
-}
-
-interface SlotGrade {
-  slot: number
-  agendamento: { id: string } | null
-}
-
-interface HorarioGrade {
-  horario: string
-  slots: SlotGrade[]
-}
-
-interface GradeAgenda {
-  data: string
-  horarios: HorarioGrade[]
-}
-
 function formatarData(data: string): string {
-  return new Date(data).toLocaleDateString('pt-BR', { timeZone: 'UTC' })
-}
-
-function formatarDataISO(data: Date): string {
-  return data.toISOString().split('T')[0]
+  return new Date(data).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
 }
 
 function labelTipo(tipo: Pacote['tipo']): string {
@@ -96,10 +65,10 @@ interface Props {
   pacienteId: string
 }
 
-export default function SessoesTab({ pacienteId }: Props) {
+const SessoesTab = memo(function SessoesTab({ pacienteId }: Props) {
   const [pacotes, setPacotes] = useState<Pacote[]>([])
   const [carregando, setCarregando] = useState(true)
-  const [precos, setPrecos] = useState<Precos | null>(null)
+  const [precos, setPrecos] = useState<{ preco_sessao_individual: number; preco_pacote_5: number; preco_pacote_10: number } | null>(null)
 
   // ── Modal: novo pacote ──
   const [modalAberto, setModalAberto] = useState(false)
@@ -115,13 +84,13 @@ export default function SessoesTab({ pacienteId }: Props) {
   const [pacoteAgendando, setPacoteAgendando] = useState<Pacote | null>(null)
   const [etapaAgendar, setEtapaAgendar] = useState<'data' | 'slot'>('data')
   const [dataAgendar, setDataAgendar] = useState<Date>(new Date())
-  const [gradeAgendar, setGradeAgendar] = useState<GradeAgenda | null>(null)
+  const [gradeAgendar, setGradeAgendar] = useState<{ data: string; horarios: { horario: string; slots: { slot: number; agendamento: { id: string } | null }[] }[] } | null>(null)
   const [carregandoGrade, setCarregandoGrade] = useState(false)
   const [horarioEscolhido, setHorarioEscolhido] = useState<string | null>(null)
   const [slotEscolhido, setSlotEscolhido] = useState<number | null>(null)
   const [confirmandoAgendamento, setConfirmandoAgendamento] = useState(false)
 
-  function precoParaTipo(tipo: Pacote['tipo'], p: Precos): string {
+  function precoParaTipo(tipo: Pacote['tipo'], p: { preco_sessao_individual: number; preco_pacote_5: number; preco_pacote_10: number }): string {
     const map = {
       INDIVIDUAL: p.preco_sessao_individual,
       PACOTE_5: p.preco_pacote_5,
@@ -138,16 +107,17 @@ export default function SessoesTab({ pacienteId }: Props) {
       ])
       setPacotes(pacotesRes.data)
       setPrecos(profissionalRes.data)
-    } catch {
-      // silencioso
+    } catch (err) {
+      toast.error(exibirErro(err, 'Não foi possível carregar os dados.'))
     } finally {
       setCarregando(false)
     }
   }, [pacienteId])
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    carregar()
+    ;(async () => {
+      await carregar()
+    })()
   }, [carregar])
 
   // ── Funções: novo pacote ──
@@ -180,19 +150,24 @@ export default function SessoesTab({ pacienteId }: Props) {
       setModalAberto(false)
       setFormPacote({ tipo: 'PACOTE_5', valor_cobrado: '', status_pagamento: 'AGUARDANDO' })
       carregar()
-    } catch {
-      // silencioso
+    } catch (err) {
+      toast.error(exibirErro(err, 'Erro ao criar pacote.'))
     } finally {
       setSalvando(false)
     }
   }
 
+  const [marcandoPagamento, setMarcandoPagamento] = useState<string | null>(null)
+
   async function handleMarcarPagamento(pacoteId: string, status: 'AGUARDANDO' | 'PAGO') {
+    setMarcandoPagamento(pacoteId)
     try {
       await api.patch(`/pacotes/${pacoteId}/pagamento`, { status_pagamento: status })
       carregar()
-    } catch {
-      // silencioso
+    } catch (err) {
+      toast.error(exibirErro(err, 'Erro ao atualizar pagamento.'))
+    } finally {
+      setMarcandoPagamento(null)
     }
   }
 
@@ -216,8 +191,8 @@ export default function SessoesTab({ pacienteId }: Props) {
       const response = await api.get(`/agenda?data=${formatarDataISO(dataAgendar)}`)
       setGradeAgendar(response.data)
       setEtapaAgendar('slot')
-    } catch {
-      // silencioso
+    } catch (err) {
+      toast.error(exibirErro(err, 'Erro ao carregar horários.'))
     } finally {
       setCarregandoGrade(false)
     }
@@ -234,8 +209,8 @@ export default function SessoesTab({ pacienteId }: Props) {
       })
       setModalAgendarAberto(false)
       carregar()
-    } catch {
-      // silencioso
+    } catch (err) {
+      toast.error(exibirErro(err, 'Erro ao agendar sessão.'))
     } finally {
       setConfirmandoAgendamento(false)
     }
@@ -305,9 +280,10 @@ export default function SessoesTab({ pacienteId }: Props) {
                   ) : (
                     <button
                       onClick={() => handleMarcarPagamento(pacote.id, 'PAGO')}
-                      className="text-xs px-2 py-1 rounded-md bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors"
+                      disabled={marcandoPagamento === pacote.id}
+                      className="text-xs px-2 py-1 rounded-md bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
-                      Marcar como pago
+                      {marcandoPagamento === pacote.id ? 'Atualizando...' : 'Marcar como pago'}
                     </button>
                   )}
                 </div>
@@ -357,186 +333,37 @@ export default function SessoesTab({ pacienteId }: Props) {
         })}
       </div>
 
-      {/* Modal: novo pacote */}
-      <Dialog open={modalAberto} onOpenChange={setModalAberto}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Novo pacote</DialogTitle>
-          </DialogHeader>
+      <ModalNovoPacote
+        open={modalAberto}
+        onOpenChange={setModalAberto}
+        formPacote={formPacote}
+        onTipoChange={handleTipoChange}
+        onValorChange={(valor) => setFormPacote((p) => ({ ...p, valor_cobrado: valor }))}
+        onStatusChange={(status) => setFormPacote((p) => ({ ...p, status_pagamento: status }))}
+        precos={precos}
+        salvando={salvando}
+        onCriar={handleCriarPacote}
+      />
 
-          <div className="space-y-4 pt-2">
-            <div className="space-y-1.5">
-              <Label>Tipo</Label>
-              <div className="grid grid-cols-3 gap-2">
-                {(['INDIVIDUAL', 'PACOTE_5', 'PACOTE_10'] as const).map((tipo) => (
-                  <button
-                    key={tipo}
-                    type="button"
-                    onClick={() => handleTipoChange(tipo)}
-                    className={`py-2 px-3 rounded-lg border text-xs font-medium transition-colors ${
-                      formPacote.tipo === tipo
-                        ? 'bg-primary text-white border-primary'
-                        : 'bg-card text-muted-foreground border-border hover:bg-accent'
-                    }`}
-                  >
-                    {labelTipo(tipo)}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="valor">Valor (R$)</Label>
-                {precos && (
-                  <span className="text-xs text-muted-foreground">
-                    Padrão: R$ {Number(precoParaTipo(formPacote.tipo, precos) || 0).toFixed(2)}
-                  </span>
-                )}
-              </div>
-              <Input
-                id="valor"
-                type="number"
-                min={0}
-                step={0.01}
-                value={formPacote.valor_cobrado}
-                onChange={(e) => setFormPacote((p) => ({ ...p, valor_cobrado: e.target.value }))}
-                placeholder="0,00"
-              />
-              <p className="text-xs text-muted-foreground">
-                Edite o valor para negociações com desconto ou acréscimo.
-              </p>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>Pagamento</Label>
-              <div className="grid grid-cols-2 gap-2">
-                {(['AGUARDANDO', 'PAGO'] as const).map((status) => (
-                  <button
-                    key={status}
-                    type="button"
-                    onClick={() => setFormPacote((p) => ({ ...p, status_pagamento: status }))}
-                    className={`py-2 px-3 rounded-lg border text-xs font-medium transition-colors ${
-                      formPacote.status_pagamento === status
-                        ? 'bg-primary text-white border-primary'
-                        : 'bg-card text-muted-foreground border-border hover:bg-accent'
-                    }`}
-                  >
-                    {status === 'AGUARDANDO' ? 'A receber' : 'Já pago'}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <Button
-              className="w-full gap-2"
-              onClick={handleCriarPacote}
-              disabled={salvando || !formPacote.valor_cobrado}
-            >
-              {salvando
-                ? <Loader2 className="w-4 h-4 animate-spin" />
-                : <Plus className="w-4 h-4" />
-              }
-              {salvando ? 'Criando...' : 'Criar pacote'}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Modal: agendar sessão num pacote existente */}
-      <Dialog open={modalAgendarAberto} onOpenChange={setModalAgendarAberto}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>
-              Agendar sessão — {pacoteAgendando && labelTipo(pacoteAgendando.tipo)}
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-4 pt-1">
-
-            {/* Etapa 1: escolher data */}
-            {etapaAgendar === 'data' && (
-              <>
-                <p className="text-sm text-muted-foreground">Escolha a data para a próxima sessão:</p>
-                <div className="flex justify-center">
-                  <DayPicker
-                    mode="single"
-                    selected={dataAgendar}
-                    onSelect={(d) => d && setDataAgendar(d)}
-                    locale={ptBR}
-                    disabled={{ before: new Date() }}
-                    className="text-sm"
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <Button className="flex-1 gap-2" disabled={carregandoGrade} onClick={handleVerHorarios}>
-                    {carregandoGrade ? <Loader2 className="w-4 h-4 animate-spin" /> : <Calendar className="w-4 h-4" />}
-                    {carregandoGrade ? 'Carregando...' : 'Ver horários disponíveis'}
-                  </Button>
-                  <Button variant="outline" onClick={() => setModalAgendarAberto(false)}>Cancelar</Button>
-                </div>
-              </>
-            )}
-
-            {/* Etapa 2: escolher horário e slot */}
-            {etapaAgendar === 'slot' && gradeAgendar && (
-              <>
-                <p className="text-sm text-muted-foreground capitalize">
-                  Horários disponíveis em{' '}
-                  <span className="font-medium">
-                    {dataAgendar.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
-                  </span>:
-                </p>
-
-                <div className="space-y-1 max-h-72 overflow-y-auto">
-                  {gradeAgendar.horarios.map(({ horario, slots }) => {
-                    const slotsLivres = slots.filter((s) => !s.agendamento)
-                    if (slotsLivres.length === 0) return null
-                    return (
-                      <div key={horario} className="flex items-center gap-3">
-                        <span className="text-xs text-muted-foreground w-12 shrink-0">{horario}</span>
-                        <div className="flex gap-2">
-                          {slotsLivres.map(({ slot }) => (
-                            <button
-                              key={slot}
-                              onClick={() => { setHorarioEscolhido(horario); setSlotEscolhido(slot) }}
-                              className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
-                                horarioEscolhido === horario && slotEscolhido === slot
-                                  ? 'bg-primary text-white border-primary'
-                                  : 'border-border text-muted-foreground hover:bg-accent'
-                              }`}
-                            >
-                              Slot {slot}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )
-                  })}
-                  {gradeAgendar.horarios.every((h) => h.slots.every((s) => s.agendamento)) && (
-                    <p className="text-sm text-muted-foreground text-center py-4">Nenhum slot disponível neste dia.</p>
-                  )}
-                </div>
-
-                <div className="flex gap-2">
-                  <Button
-                    className="flex-1 gap-2"
-                    disabled={!horarioEscolhido || !slotEscolhido || confirmandoAgendamento}
-                    onClick={handleConfirmarAgendamento}
-                  >
-                    {confirmandoAgendamento
-                      ? <Loader2 className="w-4 h-4 animate-spin" />
-                      : <CheckCircle2 className="w-4 h-4" />
-                    }
-                    {confirmandoAgendamento ? 'Agendando...' : 'Confirmar'}
-                  </Button>
-                  <Button variant="outline" onClick={() => setEtapaAgendar('data')}>Voltar</Button>
-                </div>
-              </>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      <ModalAgendarSessao
+        open={modalAgendarAberto}
+        onOpenChange={setModalAgendarAberto}
+        pacote={pacoteAgendando}
+        gradeAgendar={gradeAgendar}
+        carregandoGrade={carregandoGrade}
+        dataAgendar={dataAgendar}
+        onDataChange={setDataAgendar}
+        etapaAgendar={etapaAgendar}
+        onEtapaChange={setEtapaAgendar}
+        horarioEscolhido={horarioEscolhido}
+        slotEscolhido={slotEscolhido}
+        onSlotEscolher={(horario, slot) => { setHorarioEscolhido(horario); setSlotEscolhido(slot) }}
+        onVerHorarios={handleVerHorarios}
+        onConfirmar={handleConfirmarAgendamento}
+        confirmandoAgendamento={confirmandoAgendamento}
+      />
     </div>
   )
-}
+})
+
+export default SessoesTab

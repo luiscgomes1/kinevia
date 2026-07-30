@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   DollarSign, CheckCircle2, Clock, ChevronLeft, ChevronRight,
   TrendingUp, Users, ChevronRight as ChevronRightIcon
 } from 'lucide-react'
-import api from '@/services/api'
+import { toast } from 'sonner'
+import api, { exibirErro } from '@/services/api'
 
 interface Resumo {
   periodo: { mes: number; ano: number }
@@ -41,26 +42,29 @@ export default function FinanceiroPage() {
   const [pacientes, setPacientes] = useState<PacienteFinanceiro[]>([])
   const [carregando, setCarregando] = useState(true)
 
-  const carregar = useCallback(async () => {
-    setCarregando(true)
-    try {
-      const [resumoRes, pacientesRes] = await Promise.all([
-        api.get(`/financeiro?mes=${mes}&ano=${ano}`),
-        api.get(`/financeiro/pacientes?mes=${mes}&ano=${ano}`),
-      ])
-      setResumo(resumoRes.data)
-      setPacientes(pacientesRes.data.pacientes)
-    } catch {
-      // silencioso
-    } finally {
-      setCarregando(false)
-    }
-  }, [mes, ano])
-
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    carregar()
-  }, [carregar])
+    let cancelado = false
+    ;(async () => {
+      await Promise.resolve()
+      if (cancelado) return
+      setCarregando(true)
+      try {
+        const [resumoRes, pacientesRes] = await Promise.all([
+          api.get(`/financeiro?mes=${mes}&ano=${ano}`),
+          api.get(`/financeiro/pacientes?mes=${mes}&ano=${ano}`),
+        ])
+        if (cancelado) return
+        setResumo(resumoRes.data)
+        setPacientes(pacientesRes.data.pacientes)
+      } catch (err) {
+        if (cancelado) return
+        toast.error(exibirErro(err, 'Erro ao carregar dados financeiros.'))
+      } finally {
+        if (!cancelado) setCarregando(false)
+      }
+    })()
+    return () => { cancelado = true }
+  }, [mes, ano])
 
   function avancarMes(direcao: 1 | -1) {
     let novoMes = mes + direcao

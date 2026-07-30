@@ -1,12 +1,18 @@
-import { useState, useEffect } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
+import { useNavigate, useParams, useBlocker } from 'react-router-dom'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
 import { ArrowLeft, Save, Loader2, Pencil, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 import { formatarTelefone } from '@/lib/masks'
-import api from '@/services/api'
+import { atualizarPacienteSchema, enderecoSchema, type AtualizarPacienteForm } from '@/lib/schemas/paciente'
+import api, { exibirErro } from '@/services/api'
 
 export default function EditarPacientePage() {
   const { id } = useParams<{ id: string }>()
@@ -14,19 +20,50 @@ export default function EditarPacientePage() {
   const [carregando, setCarregando] = useState(true)
   const [salvando, setSalvando] = useState(false)
   const [editandoEndereco, setEditandoEndereco] = useState(false)
-
   const [enderecoAtual, setEnderecoAtual] = useState('')
-  const [form, setForm] = useState({
-    nome: '',
-    rua: '',
-    numero: '',
-    bairro: '',
-    cidade: '',
-    estado_civil: '',
-    nacionalidade: '',
-    telefone: '',
-    email: '',
-    observacoes: '',
+
+  const [addrRua, setAddrRua] = useState('')
+  const [addrNumero, setAddrNumero] = useState('')
+  const [addrBairro, setAddrBairro] = useState('')
+  const [addrCidade, setAddrCidade] = useState('')
+  const [erroEndereco, setErroEndereco] = useState('')
+
+  const {
+    register,
+    handleSubmit,
+    watch,
+    formState: { errors },
+    setValue,
+    reset,
+  } = useForm<AtualizarPacienteForm>({
+    resolver: zodResolver(atualizarPacienteSchema),
+    defaultValues: {
+      nome: '',
+      estado_civil: undefined,
+      nacionalidade: '',
+      telefone: '',
+      email: '',
+      observacoes: '',
+    },
+  })
+
+  const valoresIniciais = useRef('')
+
+  useEffect(() => {
+    valoresIniciais.current = JSON.stringify({ ...watch(), addrRua, addrNumero, addrBairro, addrCidade, editandoEndereco })
+  }, [])
+
+  function serializarForm(): string {
+    return JSON.stringify({ ...watch(), addrRua, addrNumero, addrBairro, addrCidade, editandoEndereco })
+  }
+
+  const blocker = useBlocker(() => serializarForm() !== valoresIniciais.current)
+
+  useEffect(() => {
+    if (serializarForm() === valoresIniciais.current) return
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
   })
 
   useEffect(() => {
@@ -35,66 +72,75 @@ export default function EditarPacientePage() {
         const response = await api.get(`/pacientes/${id}`)
         const p = response.data
         setEnderecoAtual(p.endereco || '')
-        setForm({
+        const valores = {
           nome: p.nome || '',
-          rua: '',
-          numero: '',
-          bairro: '',
-          cidade: '',
-          estado_civil: p.estado_civil || '',
+          estado_civil: p.estado_civil || undefined,
           nacionalidade: p.nacionalidade || '',
           telefone: p.telefone ? formatarTelefone(p.telefone) : '',
           email: p.email || '',
           observacoes: p.observacoes || '',
-        })
-      } catch {
-        toast.error('Não foi possível carregar os dados do paciente.')
+        }
+        reset(valores)
+        valoresIniciais.current = JSON.stringify({ ...valores, addrRua: '', addrNumero: '', addrBairro: '', addrCidade: '', editandoEndereco: false })
+      } catch (err) {
+        toast.error(exibirErro(err, 'Não foi possível carregar os dados do paciente.'))
         navigate('/pacientes')
       } finally {
         setCarregando(false)
       }
     }
     carregar()
-  }, [id, navigate])
-
-  function handleChange(campo: string, valor: string) {
-    setForm((prev) => ({ ...prev, [campo]: valor }))
-  }
+  }, [id, navigate, reset])
 
   function handleCancelarEndereco() {
     setEditandoEndereco(false)
-    setForm((prev) => ({ ...prev, rua: '', numero: '', bairro: '', cidade: '' }))
+    setErroEndereco('')
+    setAddrRua('')
+    setAddrNumero('')
+    setAddrBairro('')
+    setAddrCidade('')
   }
 
-  async function handleSalvar(e: React.SyntheticEvent) {
-    e.preventDefault()
+  async function onSubmit(data: AtualizarPacienteForm) {
+    setErroEndereco('')
+
+    if (editandoEndereco) {
+      const result = enderecoSchema.safeParse({ rua: addrRua, numero: addrNumero, bairro: addrBairro, cidade: addrCidade })
+      if (!result.success) {
+        setErroEndereco(result.error.errors[0].message)
+        return
+      }
+    }
+
     setSalvando(true)
 
     const endereco = editandoEndereco
-      ? [form.rua, form.numero && `nº ${form.numero}`, form.bairro, form.cidade]
+      ? [addrRua, addrNumero && `nº ${addrNumero}`, addrBairro, addrCidade]
           .filter(Boolean)
           .join(', ')
       : enderecoAtual
 
     try {
       await api.put(`/pacientes/${id}`, {
-        nome: form.nome,
+        nome: data.nome,
         endereco,
-        estado_civil: form.estado_civil,
-        nacionalidade: form.nacionalidade,
-        telefone: form.telefone || undefined,
-        email: form.email || undefined,
-        observacoes: form.observacoes || undefined,
+        estado_civil: data.estado_civil,
+        nacionalidade: data.nacionalidade,
+        telefone: data.telefone || undefined,
+        email: data.email || undefined,
+        observacoes: data.observacoes || undefined,
       })
       toast.success('Dados atualizados com sucesso!')
       navigate(`/pacientes/${id}`)
     } catch (err) {
-      const error = err as { response?: { data?: { erro?: string } } }
-      toast.error(error.response?.data?.erro || 'Erro ao salvar.')
+      toast.error(exibirErro(err, 'Erro ao salvar.'))
     } finally {
       setSalvando(false)
     }
   }
+
+  const Erro = ({ campo }: { campo: keyof AtualizarPacienteForm }) =>
+    errors[campo] ? <p className="text-xs text-red-500 mt-1">{errors[campo]?.message}</p> : null
 
   if (carregando) {
     return (
@@ -115,7 +161,6 @@ export default function EditarPacientePage() {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
 
-      {/* Cabeçalho */}
       <div className="flex items-center gap-3">
         <button
           onClick={() => navigate(`/pacientes/${id}`)}
@@ -129,22 +174,16 @@ export default function EditarPacientePage() {
         </div>
       </div>
 
-      <form onSubmit={handleSalvar} className="space-y-5">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
         <div className="bg-card rounded-xl border border-border p-6 space-y-4">
           <h2 className="text-sm font-semibold text-foreground">Dados pessoais</h2>
 
-          {/* Nome */}
           <div className="space-y-1.5">
             <Label htmlFor="nome">Nome completo *</Label>
-            <Input
-              id="nome"
-              value={form.nome}
-              onChange={(e) => handleChange('nome', e.target.value)}
-              required
-            />
+            <Input id="nome" {...register('nome')} />
+            <Erro campo="nome" />
           </div>
 
-          {/* Endereço */}
           <div className="space-y-1.5">
             <Label>Endereço *</Label>
 
@@ -177,50 +216,34 @@ export default function EditarPacientePage() {
                 </div>
 
                 <div className="grid grid-cols-3 gap-3">
-                  <div className="col-span-2">
-                    <Input
-                      value={form.rua}
-                      onChange={(e) => handleChange('rua', e.target.value)}
-                      placeholder="Rua / Avenida"
-                      required
-                    />
+                  <div className="col-span-2 space-y-1.5">
+                    <Input value={addrRua} onChange={e => setAddrRua(e.target.value)} placeholder="Rua / Avenida" />
                   </div>
-                  <div>
-                    <Input
-                      value={form.numero}
-                      onChange={(e) => handleChange('numero', e.target.value)}
-                      placeholder="Número"
-                    />
+                  <div className="space-y-1.5">
+                    <Input value={addrNumero} onChange={e => setAddrNumero(e.target.value)} placeholder="Número" />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <Input
-                    value={form.bairro}
-                    onChange={(e) => handleChange('bairro', e.target.value)}
-                    placeholder="Bairro"
-                    required
-                  />
-                  <Input
-                    value={form.cidade}
-                    onChange={(e) => handleChange('cidade', e.target.value)}
-                    placeholder="Cidade"
-                    required
-                  />
+                  <div className="space-y-1.5">
+                    <Input value={addrBairro} onChange={e => setAddrBairro(e.target.value)} placeholder="Bairro" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Input value={addrCidade} onChange={e => setAddrCidade(e.target.value)} placeholder="Cidade" />
+                  </div>
                 </div>
+
+                {erroEndereco && <p className="text-xs text-red-500">{erroEndereco}</p>}
               </div>
             )}
           </div>
 
-          {/* Estado civil e Nacionalidade */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label htmlFor="estado_civil">Estado civil *</Label>
-              <select
+              <Select
                 id="estado_civil"
-                value={form.estado_civil}
-                onChange={(e) => handleChange('estado_civil', e.target.value)}
-                required
+                {...register('estado_civil')}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 text-foreground"
               >
                 <option value="">Selecione...</option>
@@ -229,21 +252,17 @@ export default function EditarPacientePage() {
                 <option value="Divorciado(a)">Divorciado(a)</option>
                 <option value="Viúvo(a)">Viúvo(a)</option>
                 <option value="União estável">União estável</option>
-              </select>
+              </Select>
+              <Erro campo="estado_civil" />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="nacionalidade">Nacionalidade *</Label>
-              <Input
-                id="nacionalidade"
-                value={form.nacionalidade}
-                onChange={(e) => handleChange('nacionalidade', e.target.value)}
-                required
-              />
+              <Input id="nacionalidade" {...register('nacionalidade')} />
+              <Erro campo="nacionalidade" />
             </div>
           </div>
         </div>
 
-        {/* Contato */}
         <div className="bg-card rounded-xl border border-border p-6 space-y-4">
           <h2 className="text-sm font-semibold text-foreground">Contato</h2>
 
@@ -252,30 +271,25 @@ export default function EditarPacientePage() {
               <Label htmlFor="telefone">Telefone</Label>
               <Input
                 id="telefone"
-                value={form.telefone}
-                onChange={(e) => handleChange('telefone', formatarTelefone(e.target.value))}
                 placeholder="(21) 99999-0000"
                 inputMode="numeric"
                 maxLength={15}
+                onChange={(e) => setValue('telefone', formatarTelefone(e.target.value), { shouldValidate: true })}
               />
+              <Erro campo="telefone" />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="email">E-mail</Label>
-              <Input
-                id="email"
-                type="email"
-                value={form.email}
-                onChange={(e) => handleChange('email', e.target.value)}
-              />
+              <Input id="email" type="email" {...register('email')} />
+              <Erro campo="email" />
             </div>
           </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="observacoes">Observações</Label>
-            <textarea
+            <Textarea
               id="observacoes"
-              value={form.observacoes}
-              onChange={(e) => handleChange('observacoes', e.target.value)}
+              {...register('observacoes')}
               rows={3}
               className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
             />
@@ -290,15 +304,37 @@ export default function EditarPacientePage() {
             }
             {salvando ? 'Salvando...' : 'Salvar alterações'}
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => navigate(`/pacientes/${id}`)}
-          >
+          <Button type="button" variant="outline" onClick={() => navigate(`/pacientes/${id}`)}>
             Cancelar
           </Button>
         </div>
       </form>
+
+      {blocker.state === 'blocked' && createPortal(
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/40">
+          <div className="bg-card rounded-xl shadow-2xl border border-border p-6 max-w-sm w-full mx-4">
+            <h2 className="text-lg font-semibold text-foreground">Descartar alterações?</h2>
+            <p className="text-sm text-muted-foreground mt-2">As alterações feitas serão perdidas.</p>
+            <div className="mt-6 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => { if (blocker.state === 'blocked') blocker.reset() }}
+                className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Voltar
+              </button>
+              <button
+                type="button"
+                onClick={() => { if (blocker.state === 'blocked') blocker.proceed() }}
+                className="px-4 py-2 text-sm font-medium text-white bg-destructive hover:bg-destructive/90 rounded-lg transition-colors"
+              >
+                Descartar
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   )
 }

@@ -15,7 +15,8 @@ model Profissional {
   crefito        String
   cidade         String
   uf             String   @db.Char(2)
-  assinatura_url String?
+  assinatura_path String?
+  logo_path       String?
 
   horario_inicio String  @default("07:00")
   horario_fim    String  @default("18:00")
@@ -24,12 +25,27 @@ model Profissional {
   preco_pacote_5          Decimal @default(0) @db.Decimal(10, 2)
   preco_pacote_10         Decimal @default(0) @db.Decimal(10, 2)
 
-  criado_em DateTime @default(now())
+  criado_em      DateTime @default(now())
+  token_version  Int      @default(0)
 
   pacientes    Paciente[]
   agendamentos Agendamento[]
   pacotes      Pacote[]
   laudos       Laudo[]
+
+  @@index([email])
+}
+
+model PasswordResetToken {
+  id         String    @id @default(uuid())
+  email      String
+  token_hash String
+  expires_at DateTime
+  used_at    DateTime?
+  criado_em  DateTime  @default(now())
+
+  @@index([token_hash])
+  @@index([email])
 }
 
 model Paciente {
@@ -39,7 +55,7 @@ model Paciente {
 
   nome            String
   cpf             String
-  data_nascimento DateTime
+  data_nascimento DateTime @db.Date
   endereco        String
   estado_civil    String
   nacionalidade   String
@@ -49,16 +65,13 @@ model Paciente {
   ativo           Boolean  @default(true)
   criado_em       DateTime @default(now())
 
-  preco_sessao_individual Decimal? @db.Decimal(10, 2)
-  preco_pacote_5          Decimal? @db.Decimal(10, 2)
-  preco_pacote_10         Decimal? @db.Decimal(10, 2)
-
   agendamentos Agendamento[]
   prontuario   Prontuario?
   pacotes      Pacote[]
   laudos       Laudo[]
 
   @@unique([cpf, profissional_id])
+  @@index([profissional_id])
 }
 
 model Agendamento {
@@ -80,7 +93,11 @@ model Agendamento {
 
   sessao_pacote SessaoPacote?
 
+  lembrete_email_enviado DateTime?
+
   @@unique([profissional_id, data, horario, slot])
+  @@index([profissional_id, data, status])
+  @@index([profissional_id, data])
 }
 
 enum StatusAgendamento {
@@ -101,27 +118,34 @@ model Prontuario {
   paciente_id String   @unique
   paciente    Paciente @relation(fields: [paciente_id], references: [id])
 
-  medico_solicitante String?
-  diagnostico_medico String?
-  hda                String?
-  hpp_has            Boolean @default(false)
-  hpp_dm             Boolean @default(false)
-  hpp_ca             Boolean @default(false)
-  hpp_cardiopatia    Boolean @default(false)
-  medicacoes         String?
-  habitos_vida       String?
-  exames_medicos     String?
-  avaliacao_fisica   String?
-  diagnostico_fisio  String?
-  pa                 String?
-  fr                 String?
-  fc                 String?
-  ap                 String?
+  medico_solicitante       String?
+  diagnostico_medico       String?
+  queixa_principal         String?
+  hda                      String?
+  hpp_has                  Boolean @default(false)
+  hpp_dm                   Boolean @default(false)
+  hpp_ca                   Boolean @default(false)
+  hpp_cardiopatia          Boolean @default(false)
+  antecedentes_familiares  String?
+  medicacoes               String?
+  habitos_vida             String?
+  exames_medicos           String?
+  avaliacao_fisica         String?
+  diagnostico_fisio        String?
+  prognostico_fisio        String?
+  plano_terapeutico        String?
+  dor_eva                  Int?
+  pa                       String?
+  fr                       String?
+  fc                       String?
+  ap                       String?
 
   criado_em     DateTime @default(now())
   atualizado_em DateTime @updatedAt
 
   evolucoes Evolucao[]
+
+  @@index([paciente_id])
 }
 
 model Evolucao {
@@ -130,10 +154,14 @@ model Evolucao {
   prontuario    Prontuario @relation(fields: [prontuario_id], references: [id])
 
   texto      String
+  dor_eva    Int?
   criado_em  DateTime @default(now())
 
   correcao_texto String?
   correcao_em    DateTime?
+
+  @@index([prontuario_id])
+  @@index([dor_eva, criado_em])
 }
 
 model Pacote {
@@ -150,6 +178,9 @@ model Pacote {
   criado_em        DateTime        @default(now())
 
   sessoes SessaoPacote[]
+
+  @@index([profissional_id, criado_em])
+  @@index([paciente_id])
 }
 
 enum TipoPacote {
@@ -166,9 +197,11 @@ enum StatusPagamento {
 model SessaoPacote {
   id             String      @id @default(uuid())
   pacote_id      String
-  pacote         Pacote      @relation(fields: [pacote_id], references: [id])
+  pacote         Pacote      @relation(fields: [pacote_id], references: [id], onDelete: Cascade)
   agendamento_id String      @unique
-  agendamento    Agendamento @relation(fields: [agendamento_id], references: [id])
+  agendamento    Agendamento @relation(fields: [agendamento_id], references: [id], onDelete: Cascade)
+
+  @@index([pacote_id])
 }
 
 model Laudo {
@@ -179,9 +212,18 @@ model Laudo {
   profissional    Profissional @relation(fields: [profissional_id], references: [id])
 
   conteudo        Json
+  tipo            TipoLaudo     @default(CLINICO)
   tipo_assinatura TipoAssinatura @default(MANUSCRITA)
-  pdf_url         String?
+  pdf_path        String?
   criado_em       DateTime       @default(now())
+
+  @@index([profissional_id, paciente_id])
+}
+
+enum TipoLaudo {
+  CLINICO
+  COMPLETO
+  REEMBOLSO
 }
 
 enum TipoAssinatura {

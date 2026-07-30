@@ -67,7 +67,8 @@ export const criarPacienteSchema = z.object({
     .trim()
     .min(2, {
       message: "O nome é obrigatório e deve ter pelo menos 2 caracteres.",
-    }),
+    })
+    .max(255),
   cpf: cpfSchema,
   data_nascimento: dataNascimentoSchema,
   endereco: z
@@ -75,12 +76,12 @@ export const criarPacienteSchema = z.object({
     .trim()
     .min(5, {
       message: "O endereço é obrigatório e deve ter pelo menos 5 caracteres.",
-    }),
+    })
+    .max(500),
   estado_civil: z.enum(
-    ["solteiro(a)", "casado(a)", "divorciado(a)", "viúvo(a)"],
+    ["Solteiro(a)", "Casado(a)", "Divorciado(a)", "Vi\u00favo(a)", "Uni\u00e3o est\u00e1vel"],
     {
-      message:
-        "O estado civil é obrigatório e deve ser um dos seguintes valores: solteiro(a), casado(a), divorciado(a), viúvo(a).",
+      message: "Selecione um estado civil v\u00e1lido.",
     },
   ),
   nacionalidade: z
@@ -89,10 +90,11 @@ export const criarPacienteSchema = z.object({
     .min(2, {
       message:
         "A nacionalidade é obrigatória e deve ter pelo menos 2 caracteres.",
-    }),
+    })
+    .max(100),
   telefone: telefoneSchema.optional().or(z.literal("")),
-  email: z.string().email("Email inválido.").optional().or(z.literal("")),
-  observacoes: z.string().optional(),
+  email: z.string().email("Email inválido.").max(255).optional().or(z.literal("")),
+  observacoes: z.string().max(4000).optional(),
 });
 
 export const atualizarPacienteSchema = z.object({
@@ -109,10 +111,9 @@ export const atualizarPacienteSchema = z.object({
       message: "O endereço é obrigatório e deve ter pelo menos 5 caracteres.",
     }),
   estado_civil: z.enum(
-    ["solteiro(a)", "casado(a)", "divorciado(a)", "viúvo(a)"],
+    ["Solteiro(a)", "Casado(a)", "Divorciado(a)", "Vi\u00favo(a)", "Uni\u00e3o est\u00e1vel"],
     {
-      message:
-        "O estado civil é obrigatório e deve ser um dos seguintes valores: solteiro(a), casado(a), divorciado(a), viúvo(a).",
+      message: "Selecione um estado civil v\u00e1lido.",
     },
   ),
   nacionalidade: z
@@ -121,10 +122,11 @@ export const atualizarPacienteSchema = z.object({
     .min(2, {
       message:
         "A nacionalidade é obrigatória e deve ter pelo menos 2 caracteres.",
-    }),
+    })
+    .max(100),
   telefone: telefoneSchema.optional().or(z.literal("")),
-  email: z.string().email("Email inválido.").optional().or(z.literal("")),
-  observacoes: z.string().optional(),
+  email: z.string().email("Email inválido.").max(255).optional().or(z.literal("")),
+  observacoes: z.string().max(4000).optional(),
 });
 
 export const corrigirIdentidadeSchema = z

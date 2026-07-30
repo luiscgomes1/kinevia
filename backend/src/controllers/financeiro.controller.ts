@@ -12,8 +12,8 @@ export async function resumoFinanceiro(req: Request, res: Response) {
   const anoFiltro = ano ? parseInt(ano as string) : agora.getFullYear()
 
   // Primeiro e último dia do mês filtrado
-  const inicioPeriodo = new Date(anoFiltro, mesFiltro - 1, 1)
-  const fimPeriodo = new Date(anoFiltro, mesFiltro, 0, 23, 59, 59)
+  const inicioPeriodo = new Date(Date.UTC(anoFiltro, mesFiltro - 1, 1))
+  const fimPeriodo = new Date(Date.UTC(anoFiltro, mesFiltro, 0, 23, 59, 59))
   // new Date(ano, mes, 0) = último dia do mês anterior = último dia do mês filtrado
   // Truque do JavaScript: dia 0 de um mês = último dia do mês anterior
 
@@ -95,8 +95,8 @@ export async function financeiroPorPaciente(req: Request, res: Response) {
   const mesFiltro = mes ? parseInt(mes as string) : agora.getMonth() + 1
   const anoFiltro = ano ? parseInt(ano as string) : agora.getFullYear()
 
-  const inicioPeriodo = new Date(anoFiltro, mesFiltro - 1, 1)
-  const fimPeriodo = new Date(anoFiltro, mesFiltro, 0, 23, 59, 59)
+  const inicioPeriodo = new Date(Date.UTC(anoFiltro, mesFiltro - 1, 1))
+  const fimPeriodo = new Date(Date.UTC(anoFiltro, mesFiltro, 0, 23, 59, 59))
 
   const pacotes = await prisma.pacote.findMany({
     where: {
@@ -161,5 +161,63 @@ export async function financeiroPorPaciente(req: Request, res: Response) {
   return res.json({
     periodo: { mes: mesFiltro, ano: anoFiltro },
     pacientes: resultado,
+  })
+}
+
+// GET /financeiro/pacientes/:id
+export async function financeiroPacienteId(req: Request, res: Response) {
+  const { id } = req.params
+  const { mes, ano } = req.query
+
+  const agora = new Date()
+  const mesFiltro = mes ? parseInt(mes as string) : agora.getMonth() + 1
+  const anoFiltro = ano ? parseInt(ano as string) : agora.getFullYear()
+
+  const inicioPeriodo = new Date(Date.UTC(anoFiltro, mesFiltro - 1, 1))
+  const fimPeriodo = new Date(Date.UTC(anoFiltro, mesFiltro, 0, 23, 59, 59))
+
+  const pacotes = await prisma.pacote.findMany({
+    where: {
+      profissional_id: req.profissionalId,
+      paciente_id: id,
+      criado_em: {
+        gte: inicioPeriodo,
+        lte: fimPeriodo,
+      }
+    },
+    include: {
+      sessoes: true,
+    },
+    orderBy: { criado_em: 'desc' }
+  })
+
+  const paciente = await prisma.paciente.findFirst({
+    where: { id, profissional_id: req.profissionalId },
+    select: { id: true, nome: true }
+  })
+
+  if (!paciente) {
+    return res.status(404).json({ erro: 'Paciente não encontrado.' })
+  }
+
+  const total_cobrado = pacotes.reduce((acc, p) => acc + Number(p.valor_cobrado), 0)
+  const total_recebido = pacotes.filter(p => p.status_pagamento === 'PAGO').reduce((acc, p) => acc + Number(p.valor_cobrado), 0)
+  const total_pendente = pacotes.filter(p => p.status_pagamento === 'AGUARDANDO').reduce((acc, p) => acc + Number(p.valor_cobrado), 0)
+
+  return res.json({
+    paciente_id: paciente.id,
+    paciente_nome: paciente.nome,
+    total_cobrado,
+    total_recebido,
+    total_pendente,
+    pacotes: pacotes.map(p => ({
+      id: p.id,
+      tipo: p.tipo,
+      valor_cobrado: Number(p.valor_cobrado),
+      status_pagamento: p.status_pagamento,
+      pago_em: p.pago_em,
+      sessoes_total: p.sessoes.length,
+      criado_em: p.criado_em,
+    })),
   })
 }
