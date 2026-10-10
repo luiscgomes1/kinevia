@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import { FileText, Download, Pencil } from 'lucide-react'
+import { FileText, Download, Pencil, Trash2 } from 'lucide-react'
 import type { Laudo } from './types'
 import { TIPO_ROTULO, TIPO_COR } from './types'
 
@@ -12,9 +12,10 @@ interface Props {
     onEditar: (id: string) => void
     onBaixarPDF: (laudo: Laudo) => void
     onBaixarDeclaracao: (id: string) => void
+    onExcluir: (laudo: Laudo) => void
 }
 
-const LaudoCard = memo(function LaudoCard({ laudo, onEditar, onBaixarPDF, onBaixarDeclaracao }: Props) {
+const LaudoCard = memo(function LaudoCard({ laudo, onEditar, onBaixarPDF, onBaixarDeclaracao, onExcluir }: Props) {
     return (
         <div className="flex items-center justify-between px-4 py-3 rounded-xl border border-border bg-card">
             <div className="flex items-center gap-3">
@@ -57,6 +58,15 @@ const LaudoCard = memo(function LaudoCard({ laudo, onEditar, onBaixarPDF, onBaix
                 >
                     <Download className="w-4 h-4" />
                 </button>
+                {!laudo.pdf_path && (
+                    <button
+                        onClick={() => onExcluir(laudo)}
+                        className="p-1.5 rounded-lg text-muted-foreground hover:bg-accent hover:text-destructive transition-colors"
+                        title="Excluir laudo (ainda não virou arquivo)"
+                    >
+                        <Trash2 className="w-4 h-4" />
+                    </button>
+                )}
             </div>
         </div>
     )

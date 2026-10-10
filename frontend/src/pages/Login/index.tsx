@@ -10,6 +10,11 @@ import { Label } from '@/components/ui/label'
 import { loginSchema, type LoginForm } from '@/lib/schemas/auth'
 import api, { exibirErro, setAccessToken } from '@/services/api'
 import logoKinevia from '@/assets/logo-kinevia-2.png'
+import type { FieldErrors } from 'react-hook-form'
+
+function Erro({ errors, campo }: { errors: FieldErrors<LoginForm>; campo: keyof LoginForm }) {
+  return errors[campo] ? <p className="text-xs text-red-500 mt-1">{errors[campo]?.message}</p> : null
+}
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -28,14 +33,15 @@ export default function LoginPage() {
     try {
       const response = await api.post('/auth/login', data)
       setAccessToken(response.data?.accessToken)
-      navigate('/')
+      if (response.data?.senha_temporaria) {
+        navigate('/trocar-senha')
+      } else {
+        navigate('/')
+      }
     } catch (err) {
       toast.error(exibirErro(err, 'E-mail ou senha incorretos.'))
     }
   }
-
-  const Erro = ({ campo }: { campo: keyof LoginForm }) =>
-    errors[campo] ? <p className="text-xs text-red-500 mt-1">{errors[campo]?.message}</p> : null
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
@@ -56,7 +62,7 @@ export default function LoginPage() {
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input id="email" type="email" {...register('email')} placeholder="seu@email.com" className="pl-9" autoComplete="email" />
               </div>
-              <Erro campo="email" />
+              <Erro errors={errors} campo="email" />
             </div>
 
             <div className="space-y-1.5">
@@ -81,7 +87,7 @@ export default function LoginPage() {
                   {mostrarSenha ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
-              <Erro campo="senha" />
+              <Erro errors={errors} campo="senha" />
             </div>
 
             <Button type="submit" disabled={isSubmitting} className="w-full gap-2">
@@ -95,7 +101,10 @@ export default function LoginPage() {
           </form>
         </div>
 
-        <p className="text-center text-xs text-muted-foreground mt-6">Kinevia · Gestão fisioterapêutica</p>
+        <p className="text-center text-xs text-muted-foreground mt-4">Kinevia · Gestão fisioterapêutica</p>
+        <Link to="/privacidade" className="block text-center text-xs text-muted-foreground hover:text-primary mt-1">
+          Política de Privacidade
+        </Link>
       </div>
     </div>
   )

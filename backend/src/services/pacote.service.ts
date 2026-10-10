@@ -18,6 +18,7 @@ interface SessaoInput {
 interface CriarPacoteInput {
   paciente_id: string;
   profissional_id: string;
+  clinica_id: string | null;
   tipo: TipoPacote;
   valor_cobrado: number;
   status_pagamento?: "AGUARDANDO" | "PAGO";
@@ -28,6 +29,7 @@ export async function criarPacoteComSessoes(input: CriarPacoteInput) {
   const {
     paciente_id,
     profissional_id,
+    clinica_id,
     tipo,
     valor_cobrado,
     status_pagamento,
@@ -69,7 +71,9 @@ export async function criarPacoteComSessoes(input: CriarPacoteInput) {
       data: {
         paciente_id,
         profissional_id,
+        clinica_id,
         tipo,
+        quantidade_sessoes: limite,
         valor_cobrado,
         status_pagamento: status_pagamento || "AGUARDANDO",
       },
@@ -82,6 +86,7 @@ export async function criarPacoteComSessoes(input: CriarPacoteInput) {
         data: {
           paciente_id,
           profissional_id,
+          clinica_id,
           data: new Date(sessao.data),
           horario: sessao.horario,
           slot: sessao.slot,
@@ -109,11 +114,12 @@ interface AdicionarSessaoInput {
   pacote_id: string;
   profissional_id: string;
   paciente_id: string;
+  clinica_id: string | null;
   sessao: SessaoInput;
 }
 
 export async function adicionarSessaoAoPacote(input: AdicionarSessaoInput) {
-  const { pacote_id, profissional_id, paciente_id, sessao } = input;
+  const { pacote_id, profissional_id, paciente_id, clinica_id, sessao } = input;
 
   const resultado = await prisma.$transaction(async (tx) => {
     const slotOcupado = await tx.agendamento.findFirst({
@@ -140,7 +146,7 @@ export async function adicionarSessaoAoPacote(input: AdicionarSessaoInput) {
       throw new Error("Pacote não encontrado.");
     }
 
-    const limite = LIMITE_SESSOES[pacoteAtual.tipo as TipoPacote];
+    const limite = pacoteAtual.quantidade_sessoes;
     if (pacoteAtual.sessoes.length >= limite) {
       throw new Error(
         `O pacote do tipo ${pacoteAtual.tipo} já atingiu o limite de ${limite} sessão(ões).`,
@@ -151,6 +157,7 @@ export async function adicionarSessaoAoPacote(input: AdicionarSessaoInput) {
       data: {
         paciente_id,
         profissional_id,
+        clinica_id,
         data: new Date(sessao.data),
         horario: sessao.horario,
         slot: sessao.slot,

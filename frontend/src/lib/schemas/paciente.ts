@@ -28,16 +28,30 @@ const telefoneSchema = z
     message: 'Telefone inválido. Informe DDD + número (10 ou 11 dígitos).',
   })
 
+const dataNascimentoSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inválida.')
+  .refine((valor) => {
+    const [ano, mes, dia] = valor.split('-').map(Number)
+    const data = new Date(Date.UTC(ano, mes - 1, dia))
+
+    return (
+      data.getUTCFullYear() === ano &&
+      data.getUTCMonth() === mes - 1 &&
+      data.getUTCDate() === dia
+    )
+  }, { message: 'Data inválida.' })
+
 export const criarPacienteSchema = z.object({
   nome: z.string().trim().min(2, 'Nome deve ter pelo menos 2 caracteres.'),
   cpf: cpfSchema,
-  data_nascimento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inválida.'),
+  data_nascimento: dataNascimentoSchema,
   rua: z.string().trim().min(3, 'Rua deve ter pelo menos 3 caracteres.'),
   numero: z.string().optional(),
   bairro: z.string().trim().min(2, 'Bairro deve ter pelo menos 2 caracteres.'),
   cidade: z.string().trim().min(2, 'Cidade deve ter pelo menos 2 caracteres.'),
   estado_civil: z.enum(['Solteiro(a)', 'Casado(a)', 'Divorciado(a)', 'Viúvo(a)', 'União estável'], {
-    errorMap: () => ({ message: 'Selecione um estado civil.' }),
+    message: 'Selecione um estado civil.',
   }),
   nacionalidade: z.string().trim().min(2, 'Nacionalidade deve ter pelo menos 2 caracteres.'),
   telefone: telefoneSchema.optional().or(z.literal('')),
@@ -50,7 +64,7 @@ export type CriarPacienteForm = z.infer<typeof criarPacienteSchema>
 export const atualizarPacienteSchema = z.object({
   nome: z.string().trim().min(2, 'Nome deve ter pelo menos 2 caracteres.'),
   estado_civil: z.enum(['Solteiro(a)', 'Casado(a)', 'Divorciado(a)', 'Viúvo(a)', 'União estável'], {
-    errorMap: () => ({ message: 'Selecione um estado civil.' }),
+    message: 'Selecione um estado civil.',
   }),
   nacionalidade: z.string().trim().min(2, 'Nacionalidade deve ter pelo menos 2 caracteres.'),
   telefone: telefoneSchema.optional().or(z.literal('')),

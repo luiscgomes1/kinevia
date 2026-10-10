@@ -36,7 +36,7 @@ const fileFilter = (_req: any, file: Express.Multer.File, cb: multer.FileFilterC
 export const uploadImagem = multer({
   storage: multer.memoryStorage(),
   fileFilter,
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 4 * 1024 * 1024 },
 });
 
 export function validarImagemBuffer(buffer: Buffer, originalname: string): boolean {

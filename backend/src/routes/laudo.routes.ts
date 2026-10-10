@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { authenticate } from '../middlewares/auth.middleware'
+import { authenticate, authorize } from '../middlewares/auth.middleware'
 import { validar } from '../middlewares/validate.middleware'
 import { criarLaudoSchema } from '../schemas/laudo.schema'
 import {
@@ -9,7 +9,7 @@ import {
 
 const router = Router({ mergeParams: true })
 
-router.post('/laudos', authenticate, validar(criarLaudoSchema), criarLaudo)
-router.get('/laudos', authenticate, listarLaudos)
+router.post('/laudos', authenticate, authorize('ADMIN', 'PROFISSIONAL', 'SUPER_ADMIN'), validar(criarLaudoSchema), criarLaudo)
+router.get('/laudos', authenticate, authorize('ADMIN', 'PROFISSIONAL', 'SUPER_ADMIN'), listarLaudos)
 
 export default router

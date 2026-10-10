@@ -142,18 +142,18 @@ const ReembolsoForm = memo(function ReembolsoForm({ conteudo, onChange, tipoAssi
                 <div className="space-y-1.5">
                     <Label>Período — início</Label>
                     <input
+                        type="date"
                         value={conteudo.periodo_tratamento_inicio}
                         onChange={(e) => onChange({ periodo_tratamento_inicio: e.target.value })}
-                        placeholder="Ex: 01/01/2026"
                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     />
                 </div>
                 <div className="space-y-1.5">
                     <Label>Período — fim</Label>
                     <input
+                        type="date"
                         value={conteudo.periodo_tratamento_fim}
                         onChange={(e) => onChange({ periodo_tratamento_fim: e.target.value })}
-                        placeholder="Ex: 20/07/2026"
                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     />
                 </div>

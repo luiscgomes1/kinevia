@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  output   = "../generated/client"
 }
 
 datasource db {
@@ -7,11 +8,34 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  PROFISSIONAL
+  ATENDENTE
+}
+
+model Clinica {
+  id        String   @id @default(uuid())
+  nome      String
+  criado_em DateTime @default(now())
+
+  profissionais Profissional[]
+  pacientes     Paciente[]
+  agendamentos  Agendamento[]
+  pacotes       Pacote[]
+  laudos        Laudo[]
+}
+
 model Profissional {
   id             String   @id @default(uuid())
   nome           String
   email          String   @unique
   senha_hash     String
+  role           Role     @default(PROFISSIONAL)
+  clinica_id     String?
+  clinica        Clinica? @relation(fields: [clinica_id], references: [id])
+  senha_temporaria Boolean @default(false)
   crefito        String
   cidade         String
   uf             String   @db.Char(2)
@@ -28,12 +52,14 @@ model Profissional {
   criado_em      DateTime @default(now())
   token_version  Int      @default(0)
 
-  pacientes    Paciente[]
-  agendamentos Agendamento[]
-  pacotes      Pacote[]
-  laudos       Laudo[]
+  pacientes     Paciente[]
+  agendamentos  Agendamento[]
+  pacotes       Pacote[]
+  laudos        Laudo[]
+  notificacoes  Notificacao[]
 
   @@index([email])
+  @@index([clinica_id])
 }
 
 model PasswordResetToken {
@@ -52,6 +78,8 @@ model Paciente {
   id              String       @id @default(uuid())
   profissional_id String
   profissional    Profissional @relation(fields: [profissional_id], references: [id])
+  clinica_id      String?
+  clinica         Clinica?     @relation(fields: [clinica_id], references: [id])
 
   nome            String
   cpf             String
@@ -64,6 +92,7 @@ model Paciente {
   observacoes     String?
   ativo           Boolean  @default(true)
   criado_em       DateTime @default(now())
+  deleted_at      DateTime?
 
   agendamentos Agendamento[]
   prontuario   Prontuario?
@@ -72,6 +101,7 @@ model Paciente {
 
   @@unique([cpf, profissional_id])
   @@index([profissional_id])
+  @@index([clinica_id])
 }
 
 model Agendamento {
@@ -80,6 +110,8 @@ model Agendamento {
   paciente        Paciente     @relation(fields: [paciente_id], references: [id])
   profissional_id String
   profissional    Profissional @relation(fields: [profissional_id], references: [id])
+  clinica_id      String?
+  clinica         Clinica?     @relation(fields: [clinica_id], references: [id])
 
   data    DateTime @db.Date
   horario String
@@ -98,6 +130,7 @@ model Agendamento {
   @@unique([profissional_id, data, horario, slot])
   @@index([profissional_id, data, status])
   @@index([profissional_id, data])
+  @@index([clinica_id, data, status])
 }
 
 enum StatusAgendamento {
@@ -170,17 +203,21 @@ model Pacote {
   paciente        Paciente     @relation(fields: [paciente_id], references: [id])
   profissional_id String
   profissional    Profissional @relation(fields: [profissional_id], references: [id])
+  clinica_id      String?
+  clinica         Clinica?     @relation(fields: [clinica_id], references: [id])
 
-  tipo             TipoPacote
-  valor_cobrado    Decimal         @db.Decimal(10, 2)
-  status_pagamento StatusPagamento @default(AGUARDANDO)
-  pago_em          DateTime?
-  criado_em        DateTime        @default(now())
+  tipo              TipoPacote
+  quantidade_sessoes Int
+  valor_cobrado     Decimal         @db.Decimal(10, 2)
+  status_pagamento  StatusPagamento @default(AGUARDANDO)
+  pago_em           DateTime?
+  criado_em         DateTime        @default(now())
 
   sessoes SessaoPacote[]
 
   @@index([profissional_id, criado_em])
   @@index([paciente_id])
+  @@index([clinica_id, paciente_id])
 }
 
 enum TipoPacote {
@@ -210,6 +247,8 @@ model Laudo {
   paciente        Paciente     @relation(fields: [paciente_id], references: [id])
   profissional_id String
   profissional    Profissional @relation(fields: [profissional_id], references: [id])
+  clinica_id      String?
+  clinica         Clinica?     @relation(fields: [clinica_id], references: [id])
 
   conteudo        Json
   tipo            TipoLaudo     @default(CLINICO)
@@ -218,6 +257,7 @@ model Laudo {
   criado_em       DateTime       @default(now())
 
   @@index([profissional_id, paciente_id])
+  @@index([clinica_id, paciente_id])
 }
 
 enum TipoLaudo {
@@ -229,4 +269,29 @@ enum TipoLaudo {
 enum TipoAssinatura {
   DIGITAL
   MANUSCRITA
+}
+
+model Notificacao {
+  id              String   @id @default(uuid())
+  profissional_id String
+  profissional    Profissional @relation(fields: [profissional_id], references: [id], onDelete: Cascade)
+  tipo            String
+  titulo          String
+  mensagem        String
+  lida            Boolean  @default(false)
+  criado_em       DateTime @default(now())
+
+  @@index([profissional_id, lida, criado_em])
+}
+
+model AuditLog {
+  id              String   @id @default(uuid())
+  profissional_id String
+  paciente_id     String?
+  acao            String
+  metadata        Json?
+  criado_em       DateTime @default(now())
+
+  @@index([profissional_id, criado_em])
+  @@index([paciente_id, criado_em])
 }

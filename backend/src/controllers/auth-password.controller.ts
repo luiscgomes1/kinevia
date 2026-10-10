@@ -63,27 +63,29 @@ export async function redefinirSenha(req: Request, res: Response) {
   for (const t of tokens) {
     const match = await bcrypt.compare(token, t.token_hash);
     if (match) {
-      await prisma.passwordResetToken.update({
-        where: { id: t.id },
-        data: { used_at: new Date() },
-      });
-
       const senha_hash = await bcrypt.hash(novaSenha, 10);
 
-      const profissional = await prisma.profissional.findUnique({
-        where: { email },
-        select: { id: true },
-      });
-
-      if (profissional) {
-        await prisma.profissional.update({
-          where: { id: profissional.id },
-          data: {
-            senha_hash,
-            token_version: { increment: 1 },
-          },
+      await prisma.$transaction(async (tx) => {
+        await tx.passwordResetToken.update({
+          where: { id: t.id },
+          data: { used_at: new Date() },
         });
-      }
+
+        const profissional = await tx.profissional.findUnique({
+          where: { email },
+          select: { id: true },
+        });
+
+        if (profissional) {
+          await tx.profissional.update({
+            where: { id: profissional.id },
+            data: {
+              senha_hash,
+              token_version: { increment: 1 },
+            },
+          });
+        }
+      });
 
       valido = true;
       break;

@@ -1,7 +1,11 @@
+export type Role = 'SUPER_ADMIN' | 'ADMIN' | 'PROFISSIONAL' | 'ATENDENTE'
+
 export interface Profissional {
   id: string
   nome: string
   email: string
+  role: Role
+  clinica_id?: string | null
   crefito: string
   cidade: string
   uf: string
@@ -67,6 +71,7 @@ export interface PacoteResumo {
   status_pagamento: StatusPagamento
   sessoes_agendadas: number
   sessoes_limite: number
+  quantidade_sessoes: number
 }
 
 export interface Precos {

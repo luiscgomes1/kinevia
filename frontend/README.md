@@ -1,75 +1,79 @@
-# React + TypeScript + Vite
+# Kinevia — Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+SPA em **React 19 + Vite + TypeScript** com shadcn/ui, Tailwind CSS e react-hook-form.
 
-Currently, two official plugins are available:
+> Visão geral completa do projeto (stack, setup, backend): ver [README](../README.md).
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Stack
 
-## React Compiler
+| Área | Tecnologia |
+|------|------------|
+| Framework | React 19 + Vite 8 + TypeScript |
+| UI | shadcn/ui + Radix + Tailwind CSS |
+| Formulários | react-hook-form + Zod (`lib/schemas`) |
+| Rotas | react-router-dom 7 |
+| Gráficos | Recharts |
+| Calendário | React DayPicker |
+| Notificações | sonner (toasts) |
+| Testes | Vitest + happy-dom |
+| Estado | Context API (auth/agenda) + estado local |
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Scripts
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```bash
+npm run dev          # Dev server (http://localhost:5173)
+npm run build        # Build de produção (tsc -b && vite build)
+npm run preview      # Pré-visualizar o build
+npm run lint         # ESLint
+npm run test         # Vitest (watch)
+npm run test:run     # Vitest (1x)
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+> Typecheck separado: `npx tsc -b --noEmit` (o `build` já roda `tsc -b`).
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Estrutura
 
 ```
+src/
+├── components/          # Layout/, ui/ (shadcn), RotaProtegida, RotaConfiguracoes,
+│                        # NotificacaoPopover, SenhaInput, RouteError
+├── hooks/               # useProfissional, useProfissionais (select por papel), useNotificacoes (polling), useSetupCheck, useSenhaValida
+├── lib/
+│   ├── schemas/         # Zod schemas (auth, paciente, profissional)
+│   ├── __tests__/       # Testes de utilitários e schemas
+│   ├── api.ts           # Axios + interceptors (refresh automático)
+│   └── utils.ts, masks.ts, data.ts, pacotes.ts, senha.ts
+├── pages/
+│   ├── Login/           # Login, EsqueciSenha, RedefinirSenha, TrocarSenha, Privacidade
+│   ├── Dashboard/       # Posto de comando: cards por perfil, próximos agendamentos, gráficos (Recharts)
+│   ├── Agenda/          # Visões diária/semanal/mensal + modais (AgendaContext)
+│   ├── Pacientes/       # Lista, Novo, Editar, Perfil (4 abas)
+│   ├── Financeiro/
+│   ├── Relatorios/
+│   ├── Configuracoes/
+│   └── Admin/           # Dashboard admin, Usuarios, Auditoria, ClinicaDetalhe
+├── types/               # api.ts (Role), laudos.ts (conteúdos dos 3 tipos)
+├── router.tsx           # Rotas + guards
+└── App.tsx, main.tsx
+```
+
+## Autenticação
+
+- Access token em memória + refresh token em cookie httpOnly
+- `lib/api.ts` faz refresh automático em 401
+- Guard `RotaProtegida` exige sessão e redireciona para `/trocar-senha` se a senha
+  for temporária
+- `RotaConfiguracoes` bloqueia `/configuracoes` para ATENDENTE
+- Menu lateral condiciona itens pela role (SUPER_ADMIN/ADMIN/PROFISSIONAL/ATENDENTE)
+
+## Testes
+
+```bash
+npm run test:run   # 89 testes
+```
+
+Cobertura atual: schemas de validação, utilitários (masks, data, pacotes, senha),
+componentes, `services/api.ts` (interceptor 401/refresh/retry/redirect), guards de rota
+(`RotaAdmin`, `RotaConfiguracoes`, `RotaProtegida`), cache do `useProfissional` e filtro
+do `useProfissionais`.
+Pendência: MSW + testes de integração de páginas (login ↔ endpoint).

@@ -34,25 +34,6 @@ export const agendaPaths: OpenAPIV3.PathsObject = {
             },
         },
     },
-    '/agenda/agendamentos': {
-        post: {
-            tags: ['Agenda'],
-            summary: 'Criar agendamento',
-            security: [{ bearerAuth: [] }],
-            requestBody: {
-                required: true,
-                content: { 'application/json': { schema: { $ref: '#/components/schemas/CriarAgendamentoRequest' } } },
-            },
-            responses: {
-                '201': {
-                    description: 'Agendamento criado',
-                    content: { 'application/json': { schema: { $ref: '#/components/schemas/Agendamento' } } },
-                },
-                '400': { description: 'Horário fora do expediente ou slot ocupado' },
-                '404': { description: 'Paciente não encontrado' },
-            },
-        },
-    },
     '/agenda/agendamentos/{id}/status': {
         patch: {
             tags: ['Agenda'],

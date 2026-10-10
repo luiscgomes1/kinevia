@@ -59,25 +59,6 @@ export const schemas: Record<string, OpenAPIV3.SchemaObject> = {
             },
         },
     },
-    RegisterRequest: {
-        type: 'object',
-        required: ['nome', 'email', 'senha', 'crefito', 'cidade', 'uf'],
-        properties: {
-            nome: { type: 'string', minLength: 2 },
-            email: { type: 'string', format: 'email' },
-            senha: { type: 'string', minLength: 8 },
-            crefito: { type: 'string', minLength: 3 },
-            cidade: { type: 'string', minLength: 2 },
-            uf: { type: 'string', minLength: 2, maxLength: 2 },
-        },
-    },
-    RegisterResponse: {
-        type: 'object',
-        properties: {
-            accessToken: { type: 'string' },
-            profissional: { $ref: '#/components/schemas/Profissional' },
-        },
-    },
     RefreshResponse: {
         type: 'object',
         properties: {
@@ -118,6 +99,13 @@ export const schemas: Record<string, OpenAPIV3.SchemaObject> = {
             preco_sessao_individual: { type: 'number', minimum: 0 },
             preco_pacote_5: { type: 'number', minimum: 0 },
             preco_pacote_10: { type: 'number', minimum: 0 },
+        },
+    },
+    TrocarSenhaTemporariaRequest: {
+        type: 'object',
+        required: ['novaSenha'],
+        properties: {
+            novaSenha: { type: 'string', minLength: 8 },
         },
     },
     TrocarSenhaRequest: {

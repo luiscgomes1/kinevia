@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { Search, UserPlus, UserCheck, UserX, ChevronRight } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { Search, UserPlus, UserCheck, Users, ChevronRight, Loader2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -23,29 +23,44 @@ export default function PacientesPage() {
   const [busca, setBusca] = useState('')
   const [incluirInativos, setIncluirInativos] = useState(false)
   const [carregando, setCarregando] = useState(true)
+  const [carregandoMais, setCarregandoMais] = useState(false)
+  const offsetRef = useRef(0)
+  const [acabou, setAcabou] = useState(false)
+  const limite = 30
+
+  const carregar = useCallback(async (reset: boolean, offsetAtual?: number, signal?: AbortSignal) => {
+    const off = reset ? 0 : (offsetAtual ?? offsetRef.current)
+    if (reset) { setCarregando(true); offsetRef.current = 0; setAcabou(false) }
+    else setCarregandoMais(true)
+    try {
+      const params = new URLSearchParams()
+      if (busca) params.set('busca', busca)
+      if (incluirInativos) params.set('incluirInativos', 'true')
+      params.set('limit', String(limite))
+      params.set('offset', String(off))
+      const response = await api.get(`/pacientes?${params.toString()}`, { signal })
+      if (reset) {
+        setPacientes(response.data)
+      } else {
+        setPacientes((prev) => [...prev, ...response.data])
+      }
+      if (response.data.length < limite) setAcabou(true)
+    } catch (err) {
+      if (signal?.aborted) return
+      toast.error(exibirErro(err, 'Erro ao carregar pacientes.'))
+    } finally {
+      if (!signal?.aborted) {
+        setCarregando(false)
+        setCarregandoMais(false)
+      }
+    }
+  }, [busca, incluirInativos])
 
   useEffect(() => {
     const controller = new AbortController()
-    const timeout = setTimeout(async () => {
-      setCarregando(true)
-      try {
-        const params = new URLSearchParams()
-        if (busca) params.set('busca', busca)
-        if (incluirInativos) params.set('incluirInativos', 'true')
-        const response = await api.get(`/pacientes?${params.toString()}`, { signal: controller.signal })
-        setPacientes(response.data)
-      } catch (err) {
-        if (err instanceof DOMException && err.name === 'AbortError') return
-        toast.error(exibirErro(err, 'Erro ao carregar pacientes.'))
-      } finally {
-        setCarregando(false)
-      }
-    }, 300)
-    return () => {
-      controller.abort()
-      clearTimeout(timeout)
-    }
-  }, [busca, incluirInativos])
+    const timeout = setTimeout(() => carregar(true, undefined, controller.signal), 300)
+    return () => { controller.abort(); clearTimeout(timeout) }
+  }, [busca, incluirInativos, carregar])
 
   return (
     <div className="space-y-5">
@@ -75,17 +90,34 @@ export default function PacientesPage() {
             className="pl-9"
           />
         </div>
-        <button
-          onClick={() => setIncluirInativos(!incluirInativos)}
-          className={`flex items-center gap-2 text-sm px-3 py-2 rounded-lg border transition-colors ${
-            incluirInativos
-              ? 'bg-accent border-border text-foreground'
-              : 'border-border text-muted-foreground hover:bg-accent'
-          }`}
-        >
-          {incluirInativos ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
-          {incluirInativos ? 'Ocultar inativos' : 'Ver inativos'}
-        </button>
+        <div className="inline-flex items-center rounded-lg border border-border bg-muted/50 p-0.5">
+          <button
+            type="button"
+            onClick={() => setIncluirInativos(false)}
+            aria-pressed={!incluirInativos}
+            className={`flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-md transition-all ${
+              !incluirInativos
+                ? 'bg-card text-foreground shadow-sm border border-border'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <UserCheck className="w-4 h-4" />
+            Ativos
+          </button>
+          <button
+            type="button"
+            onClick={() => setIncluirInativos(true)}
+            aria-pressed={incluirInativos}
+            className={`flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-md transition-all ${
+              incluirInativos
+                ? 'bg-card text-foreground shadow-sm border border-border'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            Todos
+          </button>
+        </div>
       </div>
 
       {/* Lista */}
@@ -150,6 +182,26 @@ export default function PacientesPage() {
           </button>
         ))}
       </div>
+
+      {/* Carregar mais */}
+      {!carregando && !acabou && pacientes.length > 0 && (
+        <div className="flex justify-center">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={carregandoMais}
+            onClick={() => {
+              const novoOffset = pacientes.length
+              offsetRef.current = novoOffset
+              carregar(false, novoOffset)
+            }}
+            className="gap-2"
+          >
+            {carregandoMais ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+            {carregandoMais ? 'Carregando...' : 'Carregar mais'}
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

@@ -3,6 +3,8 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import prisma from '../lib/prisma';
 
+import { JWT_ISSUER, JWT_AUDIENCE } from '../lib/jwt';
+
 const ACCESS_TOKEN_EXPIRY = process.env.ACCESS_TOKEN_EXPIRY || '15m';
 const REFRESH_TOKEN_EXPIRY = process.env.REFRESH_TOKEN_EXPIRY || '7d';
 
@@ -20,7 +22,9 @@ function parseCookieMaxAge(value: string): number {
 const COOKIE_OPTIONS = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
-  sameSite: 'strict' as const,
+  // Produção com front e API em domínios distintos (ex.: Vercel) exige
+  // SameSite=None + Secure para o navegador reenviar o cookie no refresh.
+  sameSite: process.env.NODE_ENV === 'production' ? ('none' as const) : ('strict' as const),
   path: '/v1/auth',
   maxAge: parseCookieMaxAge(REFRESH_TOKEN_EXPIRY),
 };
@@ -38,20 +42,20 @@ function toJwtExpiry(value: string): jwt.SignOptions['expiresIn'] {
   return value as jwt.SignOptions['expiresIn'];
 }
 
-function generateTokens(profissionalId: string, tokenVersion: number) {
+function generateTokens(profissionalId: string, tokenVersion: number, senhaTemporaria?: boolean) {
     const accessSecret = process.env.JWT_SECRET!;
     const refreshSecret = process.env.JWT_REFRESH_SECRET!;
 
     const accessToken = jwt.sign(
-        { id: profissionalId, token_version: tokenVersion },
+        { id: profissionalId, token_version: tokenVersion, senha_temporaria: senhaTemporaria ?? false },
         accessSecret,
-        { expiresIn: toJwtExpiry(ACCESS_TOKEN_EXPIRY) }
+        { expiresIn: toJwtExpiry(ACCESS_TOKEN_EXPIRY), issuer: JWT_ISSUER, audience: JWT_AUDIENCE }
     );
 
     const refreshToken = jwt.sign(
         { id: profissionalId, token_version: tokenVersion },
         refreshSecret,
-        { expiresIn: toJwtExpiry(REFRESH_TOKEN_EXPIRY) }
+        { expiresIn: toJwtExpiry(REFRESH_TOKEN_EXPIRY), issuer: JWT_ISSUER, audience: JWT_AUDIENCE }
     );
 
     return { accessToken, refreshToken };
@@ -65,6 +69,7 @@ export async function login(req: Request, res: Response) {
     });
 
     if (!profissional) {
+        await bcrypt.compare(senha, '$2a$10$0000000000000000000000');
         res.status(401).json({ erro: 'Credenciais inválidas.' });
         return;
     }
@@ -76,7 +81,7 @@ export async function login(req: Request, res: Response) {
         return;
     }
 
-    const tokens = generateTokens(profissional.id, profissional.token_version);
+    const tokens = generateTokens(profissional.id, profissional.token_version, profissional.senha_temporaria);
 
     setRefreshCookie(res, tokens.refreshToken);
 
@@ -86,7 +91,8 @@ export async function login(req: Request, res: Response) {
             id: profissional.id,
             nome: profissional.nome,
             email: profissional.email,
-        }
+        },
+        senha_temporaria: profissional.senha_temporaria,
     });
 }
 
@@ -105,11 +111,11 @@ export async function refreshToken(req: Request, res: Response) {
     }
 
     try {
-        const payload = jwt.verify(token, refreshSecret) as { id: string; token_version: number };
+        const payload = jwt.verify(token, refreshSecret, { issuer: JWT_ISSUER, audience: JWT_AUDIENCE }) as { id: string; token_version: number };
 
         const profissional = await prisma.profissional.findUnique({
             where: { id: payload.id },
-            select: { token_version: true }
+            select: { token_version: true, senha_temporaria: true }
         });
 
         if (!profissional) {
@@ -125,13 +131,13 @@ export async function refreshToken(req: Request, res: Response) {
         }
 
         // Rotaciona token_version: invalida o token antigo e impede reuse
-        const { token_version: novaVersao } = await prisma.profissional.update({
+        const { token_version: novaVersao, senha_temporaria } = await prisma.profissional.update({
             where: { id: payload.id },
             data: { token_version: { increment: 1 } },
-            select: { token_version: true },
+            select: { token_version: true, senha_temporaria: true },
         })
 
-        const tokens = generateTokens(payload.id, novaVersao);
+        const tokens = generateTokens(payload.id, novaVersao, senha_temporaria);
 
         setRefreshCookie(res, tokens.refreshToken);
 
@@ -144,46 +150,41 @@ export async function refreshToken(req: Request, res: Response) {
     }
 }
 
-export async function register(req: Request, res: Response) {
-    const { nome, email, senha, crefito, cidade, uf } = req.body;
+export async function trocarSenha(req: Request, res: Response) {
+    const { novaSenha } = req.body;
 
-    const existente = await prisma.profissional.findUnique({
-        where: { email },
+    const profissional = await prisma.profissional.findUnique({
+        where: { id: req.profissionalId },
     });
 
-    if (existente) {
-        res.status(409).json({ erro: 'Já existe uma conta com este email.' });
+    if (!profissional) {
+        res.status(404).json({ erro: 'Profissional não encontrado.' });
         return;
     }
 
-    const senha_hash = await bcrypt.hash(senha, 10);
+    if (!profissional.senha_temporaria) {
+        res.status(400).json({ erro: 'Senha temporária não está ativa.' });
+        return;
+    }
 
-    const profissional = await prisma.profissional.create({
+    const senha_hash = await bcrypt.hash(novaSenha, 10);
+
+    const atualizado = await prisma.profissional.update({
+        where: { id: req.profissionalId },
         data: {
-            nome,
-            email,
             senha_hash,
-            crefito,
-            cidade,
-            uf,
-        },
-        select: {
-            id: true,
-            nome: true,
-            email: true,
-            crefito: true,
-            cidade: true,
-            uf: true,
+            senha_temporaria: false,
+            token_version: { increment: 1 },
         },
     });
 
-    const tokens = generateTokens(profissional.id, 0);
+    const tokens = generateTokens(atualizado.id, atualizado.token_version, false);
 
     setRefreshCookie(res, tokens.refreshToken);
 
-    res.status(201).json({
+    res.json({
+        mensagem: 'Senha alterada com sucesso.',
         accessToken: tokens.accessToken,
-        profissional,
     });
 }
 

@@ -119,7 +119,7 @@ const ModalAgendamentoRapido = memo(function ModalAgendamentoRapido() {
         })
       } catch {
         // Limpa o pacote órfão se o agendamento falhar
-        try { await api.delete(`/pacotes/${pacoteRes.data.pacote.id}`) } catch {}
+        try { await api.delete(`/pacotes/${pacoteRes.data.pacote.id}`) } catch { /* pacote já removido */ }
         throw new Error('Falha ao agendar sessão. Pacote removido.')
       }
       toast.success('Pacote criado e sessão agendada!')
@@ -155,7 +155,7 @@ const ModalAgendamentoRapido = memo(function ModalAgendamentoRapido() {
         <DialogHeader>
           <div className="flex items-center gap-2">
             {etapa !== 'buscar' && (
-              <button onClick={() => { setEtapa('buscar'); setPacienteSelecionado(null); setBuscaPaciente('') }} className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors">
+              <button onClick={() => { setEtapa('buscar'); setPacienteSelecionado(null); setBuscaPaciente('') }} aria-label="Voltar" className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors">
                 <ArrowLeft className="w-4 h-4" />
               </button>
             )}

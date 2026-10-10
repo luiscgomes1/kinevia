@@ -37,7 +37,7 @@ interface GradeAgenda {
 type Etapa = 'sem_pacote' | 'criar_pacote_marcar' | 'escolher_data' | 'escolher_slot' | 'selecionar_pacote_marcar'
 
 const ModalMarcarSessao = memo(function ModalMarcarSessao() {
-  const { pacienteMarcar: paciente, fecharMarcarSessao: onClose, recarregar: onAgendado } = useAgenda()
+  const { pacienteMarcar: paciente, fecharMarcarSessao: onClose, recarregar: onAgendado, profissionalFiltroId } = useAgenda()
   const [pronto, setPronto] = useState(false)
   const [etapa, setEtapa] = useState<Etapa>('escolher_data')
   const [dataMarcar, setDataMarcar] = useState<Date>(new Date())
@@ -122,7 +122,8 @@ const ModalMarcarSessao = memo(function ModalMarcarSessao() {
         valor_cobrado: pacoteCriado.valor_cobrado,
         status_pagamento: pacoteCriado.status_pagamento,
         sessoes_agendadas: 0,
-        sessoes_limite: LIMITE_SESSOES_POR_TIPO[pacoteCriado.tipo as Pacote['tipo']],
+        quantidade_sessoes: pacoteCriado.quantidade_sessoes ?? LIMITE_SESSOES_POR_TIPO[pacoteCriado.tipo as Pacote['tipo']],
+        sessoes_limite: pacoteCriado.quantidade_sessoes ?? LIMITE_SESSOES_POR_TIPO[pacoteCriado.tipo as Pacote['tipo']],
       }
 
       setPacotesMarcar([novoPacote])
@@ -142,7 +143,9 @@ const ModalMarcarSessao = memo(function ModalMarcarSessao() {
     setHorarioMarcar(null)
     setSlotMarcar(null)
     try {
-      const response = await api.get(`/agenda?data=${formatarDataISO(data)}`)
+      const params = new URLSearchParams({ data: formatarDataISO(data) })
+      if (profissionalFiltroId) params.set('profissional_id', profissionalFiltroId)
+      const response = await api.get(`/agenda?${params.toString()}`)
       setGradeMarcar(response.data)
       setEtapa('escolher_slot')
     } catch {
@@ -175,12 +178,12 @@ const ModalMarcarSessao = memo(function ModalMarcarSessao() {
         <DialogHeader>
           <div className="flex items-center gap-2">
             {(etapa === 'escolher_slot' || etapa === 'criar_pacote_marcar') && (
-              <button onClick={() => setEtapa(etapa === 'criar_pacote_marcar' ? 'sem_pacote' : 'escolher_data')} className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors">
+              <button onClick={() => setEtapa(etapa === 'criar_pacote_marcar' ? 'sem_pacote' : 'escolher_data')} aria-label="Voltar" className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors">
                 <ArrowLeft className="w-4 h-4" />
               </button>
             )}
             {etapa === 'selecionar_pacote_marcar' && (
-              <button onClick={() => setEtapa('escolher_slot')} className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors">
+              <button onClick={() => setEtapa('escolher_slot')} aria-label="Voltar" className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors">
                 <ArrowLeft className="w-4 h-4" />
               </button>
             )}

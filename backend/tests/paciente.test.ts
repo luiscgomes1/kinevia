@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import request from 'supertest'
 import app from '../src/server'
 import prisma from '../src/lib/prisma'
-import { criarProfissional, criarPaciente, gerarToken, getAuthHeaders, managePrisma } from './helpers'
+import { criarProfissional, criarPaciente, criarClinica, gerarToken, getAuthHeaders, managePrisma } from './helpers'
 
 managePrisma()
 
@@ -10,6 +10,7 @@ describe('GET /v1/pacientes', () => {
   let profissionalId: string
   let token: string
   let pacienteId: string
+  let inativoId: string
 
   beforeAll(async () => {
     const p = await criarProfissional()
@@ -17,6 +18,9 @@ describe('GET /v1/pacientes', () => {
     token = gerarToken(profissionalId)
     const pac = await criarPaciente(profissionalId, { nome: 'Paciente Lista' })
     pacienteId = pac.id
+    const inativo = await criarPaciente(profissionalId, { nome: 'Paciente Inativo', cpf: '11144477735' })
+    inativoId = inativo.id
+    await prisma.paciente.update({ where: { id: inativoId }, data: { ativo: false } })
   })
 
   afterAll(async () => {
@@ -31,6 +35,22 @@ describe('GET /v1/pacientes', () => {
     expect(res.status).toBe(200)
     expect(Array.isArray(res.body)).toBe(true)
     expect(res.body.some((p: any) => p.id === pacienteId)).toBe(true)
+  })
+
+  it('oculta pacientes inativos por padrão', async () => {
+    const res = await request(app)
+      .get('/v1/pacientes')
+      .set(getAuthHeaders(token))
+    expect(res.status).toBe(200)
+    expect(res.body.some((p: any) => p.id === inativoId)).toBe(false)
+  })
+
+  it('inclui pacientes inativos com incluirInativos=true', async () => {
+    const res = await request(app)
+      .get('/v1/pacientes?incluirInativos=true')
+      .set(getAuthHeaders(token))
+    expect(res.status).toBe(200)
+    expect(res.body.some((p: any) => p.id === inativoId)).toBe(true)
   })
 
   it('retorna array vazio para profissional sem pacientes', async () => {
@@ -177,5 +197,80 @@ describe('PUT /v1/pacientes/:id', () => {
       })
     expect(res.status).toBe(200)
     expect(res.body.nome).toBe('Nome Atualizado')
+  })
+})
+
+describe('POST /v1/pacientes/:id/transferir', () => {
+  let superAdminId: string
+  let superAdminToken: string
+  let profissionalOrigemId: string
+  let profissionalDestinoId: string
+  let pacienteId: string
+
+  beforeAll(async () => {
+    superAdminId = (await criarProfissional({ email: `super${Date.now()}@test.com`, role: 'SUPER_ADMIN' })).id
+    superAdminToken = gerarToken(superAdminId)
+    profissionalOrigemId = (await criarProfissional({ email: `origem${Date.now()}@test.com` })).id
+    profissionalDestinoId = (await criarProfissional({ email: `destino${Date.now()}@test.com` })).id
+    const pac = await criarPaciente(profissionalOrigemId)
+    pacienteId = pac.id
+  })
+
+  afterAll(async () => {
+    await prisma.paciente.deleteMany({ where: { id: pacienteId } })
+    await prisma.profissional.deleteMany({ where: { id: { in: [superAdminId, profissionalOrigemId, profissionalDestinoId] } } })
+  })
+
+  it('transfere paciente entre profissionais', async () => {
+    const res = await request(app)
+      .post(`/v1/pacientes/${pacienteId}/transferir`)
+      .set(getAuthHeaders(superAdminToken))
+      .send({ novo_profissional_id: profissionalDestinoId })
+    expect(res.status).toBe(200)
+    expect(res.body.mensagem).toContain('Paciente transferido')
+
+    const paciente = await prisma.paciente.findUnique({ where: { id: pacienteId } })
+    expect(paciente?.profissional_id).toBe(profissionalDestinoId)
+  })
+
+  it('rejeita ADMIN de outra clínica', async () => {
+    const outraClinica = await criarClinica('Outra')
+    const adminOutraClinica = await criarProfissional({ email: `admin-outra${Date.now()}@test.com`, role: 'ADMIN', clinica_id: outraClinica.id })
+    const tokenOutra = gerarToken(adminOutraClinica.id)
+    const res = await request(app)
+      .post(`/v1/pacientes/${pacienteId}/transferir`)
+      .set(getAuthHeaders(tokenOutra))
+      .send({ novo_profissional_id: profissionalDestinoId })
+    expect(res.status).toBe(404)
+    await prisma.profissional.delete({ where: { id: adminOutraClinica.id } })
+    await prisma.clinica.delete({ where: { id: outraClinica.id } })
+  })
+
+  it('rejeita sem token', async () => {
+    const res = await request(app)
+      .post(`/v1/pacientes/${pacienteId}/transferir`)
+      .send({ novo_profissional_id: profissionalDestinoId })
+    expect(res.status).toBe(401)
+  })
+
+  it('rejeita transferência para ATENDENTE', async () => {
+    const atendente = await criarProfissional({ email: `atendente-transf${Date.now()}@test.com`, role: 'ATENDENTE' })
+    const res = await request(app)
+      .post(`/v1/pacientes/${pacienteId}/transferir`)
+      .set(getAuthHeaders(superAdminToken))
+      .send({ novo_profissional_id: atendente.id })
+    expect(res.status).toBe(400)
+    await prisma.profissional.delete({ where: { id: atendente.id } })
+  })
+
+  it('rejeita com role PROFISSIONAL', async () => {
+    const prof = await criarProfissional({ email: `prof-transf${Date.now()}@test.com` })
+    const tokenProf = gerarToken(prof.id)
+    const res = await request(app)
+      .post(`/v1/pacientes/${pacienteId}/transferir`)
+      .set(getAuthHeaders(tokenProf))
+      .send({ novo_profissional_id: profissionalDestinoId })
+    expect(res.status).toBe(403)
+    await prisma.profissional.delete({ where: { id: prof.id } })
   })
 })

@@ -24,7 +24,7 @@ export function clearAccessToken() {
   accessToken = null
 }
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3333"
+const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/+$/, "")
 
 const api = axios.create({
   baseURL: `${API_BASE}/v1`,
@@ -49,10 +49,10 @@ async function doRefresh(): Promise<string | null> {
 
     const { accessToken: newToken } = res.data
     setAccessToken(newToken)
-    toast.success('Sessão renovada automaticamente.')
     return newToken
   } catch {
     clearAccessToken()
+    toast.error('Sua sessão expirou. Faça login novamente.')
     window.location.href = "/login"
     return null
   }

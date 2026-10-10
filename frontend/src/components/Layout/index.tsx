@@ -5,31 +5,73 @@ import {
   DollarSign,
   Settings,
   BarChart3,
+  Shield,
   LogOut,
   Menu,
   X,
   Moon,
   Sun,
+  ClipboardList,
+  LayoutDashboard,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { cn } from '@/lib/utils'
 import logoKinevia from '@/assets/logo-kinevia-2.png'
 import api, { clearAccessToken } from '@/services/api'
-import { clearProfissionalCache } from '@/hooks/useProfissional'
+import { clearProfissionalCache, useProfissional } from '@/hooks/useProfissional'
 import { useTheme } from '@/components/ThemeProvider'
+import NotificacaoPopover from '@/components/NotificacaoPopover'
+import type { Role } from '@/types/api'
 
 const itensNav = [
+  { label: 'Dashboard', icone: LayoutDashboard, href: '/dashboard' },
   { label: 'Agenda', icone: CalendarDays, href: '/agenda' },
   { label: 'Pacientes', icone: Users, href: '/pacientes' },
   { label: 'Financeiro', icone: DollarSign, href: '/financeiro' },
   { label: 'Relatórios', icone: BarChart3, href: '/relatorios' },
   { label: 'Configurações', icone: Settings, href: '/configuracoes' },
-]
+] as const
+
+const rolesAdmin: Role[] = ['ADMIN', 'SUPER_ADMIN']
+
+const rotulosRole: Record<Role, string> = {
+  SUPER_ADMIN: 'Super Admin',
+  ADMIN: 'Dono',
+  PROFISSIONAL: 'Profissional',
+  ATENDENTE: 'Atendente',
+}
 
 export default function Layout() {
   const navigate = useNavigate()
   const [menuAberto, setMenuAberto] = useState(false)
   const { theme, toggleTheme } = useTheme()
+  const { profissional } = useProfissional()
+
+  const itensNavCompletos = useMemo(() => {
+    let base: readonly typeof itensNav[number][] = itensNav
+    if (profissional?.role === 'ATENDENTE') {
+      base = itensNav.filter((i) => i.href === '/dashboard' || i.href === '/agenda' || i.href === '/pacientes')
+    }
+    if (profissional?.role === 'PROFISSIONAL') {
+      base = itensNav.filter((i) => i.href !== '/financeiro')
+    }
+    if (profissional?.role === 'SUPER_ADMIN') {
+      return [
+        ...base,
+        { label: 'Auditoria', icone: ClipboardList, href: '/admin/auditoria' },
+        { label: 'Admin', icone: Shield, href: '/admin' },
+      ]
+    }
+    if (profissional && rolesAdmin.includes(profissional.role)) {
+      return [
+        ...base,
+        { label: 'Auditoria', icone: ClipboardList, href: '/admin/auditoria' },
+        { label: 'Painel do Dono', icone: Shield, href: '/admin' },
+        { label: 'Usuários', icone: Shield, href: '/admin/usuarios' },
+      ]
+    }
+    return base
+  }, [profissional])
 
   async function handleLogout() {
     try {
@@ -62,10 +104,11 @@ export default function Layout() {
 
         {/* Navegação */}
         <nav className="flex-1 px-3 py-4 space-y-0.5">
-          {itensNav.map(({ label, icone: Icone, href }) => (
+          {itensNavCompletos.map(({ label, icone: Icone, href }) => (
             <NavLink
               key={href}
               to={href}
+              end={href === '/admin'}
               className={({ isActive }) =>
                 cn(
                   'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
@@ -81,8 +124,22 @@ export default function Layout() {
           ))}
         </nav>
 
-        {/* Rodapé da sidebar — tema + logout */}
-        <div className="px-3 py-4 border-t border-border space-y-1">
+        {/* Rodapé da sidebar — usuário, notificações, tema + logout */}
+        <div className="px-3 pt-4 pb-2 border-t border-border space-y-1">
+          {profissional && (
+            <div className="flex items-center gap-3 px-2 py-2">
+              <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold shrink-0">
+                {profissional.nome.charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground truncate">{profissional.nome}</p>
+                <p className="text-xs text-muted-foreground truncate">{rotulosRole[profissional.role]}</p>
+              </div>
+            </div>
+          )}
+          <div className="flex items-center gap-1 px-3 pt-2 pb-2">
+            <NotificacaoPopover abreParaDireita abreParaCima mostrarLabel />
+          </div>
           <button
             onClick={toggleTheme}
             className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors w-full"
@@ -111,12 +168,15 @@ export default function Layout() {
           />
           <span className="font-logo font-bold text-foreground text-sm">Kinevia</span>
         </div>
-        <button
-          onClick={() => setMenuAberto(!menuAberto)}
-          className="p-1.5 rounded-lg text-muted-foreground hover:bg-accent transition-colors"
-        >
-          {menuAberto ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-        </button>
+        <div className="flex items-center gap-1">
+          <NotificacaoPopover />
+          <button
+            onClick={() => setMenuAberto(!menuAberto)}
+            className="p-1.5 rounded-lg text-muted-foreground hover:bg-accent transition-colors"
+          >
+            {menuAberto ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+        </div>
       </header>
 
       {/* ── Menu mobile (drawer) ─────────────────────────── */}
@@ -126,10 +186,11 @@ export default function Layout() {
             className="absolute top-[57px] left-0 right-0 bg-card border-b border-border p-3 space-y-0.5"
             onClick={(e) => e.stopPropagation()}
           >
-            {itensNav.map(({ label, icone: Icone, href }) => (
+            {itensNavCompletos.map(({ label, icone: Icone, href }) => (
               <NavLink
                 key={href}
                 to={href}
+                end={href === '/admin'}
                 onClick={() => setMenuAberto(false)}
                 className={({ isActive }) =>
                   cn(
@@ -145,6 +206,17 @@ export default function Layout() {
               </NavLink>
             ))}
             <div className="pt-2 border-t border-border mt-2 space-y-1">
+              {profissional && (
+                <div className="flex items-center gap-3 px-3 py-2">
+                  <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold shrink-0">
+                    {profissional.nome.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">{profissional.nome}</p>
+                    <p className="text-xs text-muted-foreground truncate">{rotulosRole[profissional.role]}</p>
+                  </div>
+                </div>
+              )}
               <button
                 onClick={toggleTheme}
                 className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-accent transition-colors w-full"
@@ -176,22 +248,24 @@ export default function Layout() {
       </main>
 
       {/* ── Bottom navigation mobile ─────────────────────── */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border px-2 py-2 flex items-center justify-around z-10">
-        {itensNav.map(({ label, icone: Icone, href }) => (
-          <NavLink
-            key={href}
-            to={href}
-            className={({ isActive }) =>
-              cn(
-                'flex flex-col items-center gap-1 px-3 py-1 rounded-lg transition-colors',
-                isActive ? 'text-primary' : 'text-muted-foreground'
-              )
-            }
-          >
-            <Icone className="w-5 h-5" />
-            <span className="text-[10px] font-medium">{label}</span>
-          </NavLink>
-        ))}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border z-10">
+        <div className="flex items-center overflow-x-auto px-2 py-2 gap-1 scrollbar-none">
+          {itensNavCompletos.map(({ label, icone: Icone, href }) => (
+            <NavLink
+              key={href}
+              to={href}
+              className={({ isActive }) =>
+                cn(
+                  'flex flex-col items-center gap-1 px-3 py-1 rounded-lg transition-colors shrink-0',
+                  isActive ? 'text-primary' : 'text-muted-foreground'
+                )
+              }
+            >
+              <Icone className="w-5 h-5" />
+              <span className="text-[10px] font-medium whitespace-nowrap">{label}</span>
+            </NavLink>
+          ))}
+        </div>
       </nav>
     </div>
   )

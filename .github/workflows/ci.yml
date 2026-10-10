@@ -2,67 +2,59 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [main]
   pull_request:
-    branches: [main, master]
 
 jobs:
-  lint-and-test:
+  backend:
+    name: Backend (tsc + testes)
     runs-on: ubuntu-latest
-
     services:
       postgres:
-        image: postgres:16
+        image: postgres:16-alpine
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: kinevia_test
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+          POSTGRES_USER: fisiogest
+          POSTGRES_PASSWORD: fisiogest
+          POSTGRES_DB: fisiogest_test
         ports:
           - 5432:5432
-
+        options: >-
+          --health-cmd "pg_isready -U fisiogest"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: backend
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: 20
-
-      - name: Install backend dependencies
-        working-directory: ./backend
-        run: npm ci
-
-      - name: Generate Prisma client
-        working-directory: ./backend
-        run: npx prisma generate
-
-      - name: Run database migrations
-        working-directory: ./backend
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx tsc --noEmit
+      - run: npm run test:run
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/kinevia_test
-        run: npx prisma migrate deploy
+          DATABASE_URL: postgresql://fisiogest:fisiogest@localhost:5432/fisiogest_test
 
-      - name: Run backend tests
-        working-directory: ./backend
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/kinevia_test
-          JWT_SECRET: ci-jwt-secret
-          JWT_REFRESH_SECRET: ci-jwt-refresh-secret
-        run: npm test
-
-      - name: Install frontend dependencies
-        working-directory: ./frontend
-        run: npm ci
-
-      - name: Run frontend tests
-        working-directory: ./frontend
-        run: npm test
-
-      - name: Build frontend
-        working-directory: ./frontend
-        run: npm run build
+  frontend:
+    name: Frontend (tsc + lint + testes + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npx tsc -b
+      - run: npm run lint
+      - run: npm run test:run
+      - run: npm run build

@@ -1,6 +1,7 @@
 import PDFDocument from 'pdfkit'
 import type { Response } from 'express'
 import * as stream from 'stream'
+import { desenharTabelaEVA } from './pdf-tools'
 
 interface DadosLaudoCompleto {
     cidade: string
@@ -17,6 +18,7 @@ interface DadosLaudoCompleto {
     eva_inicial: number | null
     eva_atual: number | null
     data_inicio: string
+    data_fim: string
     frequencia_semanal: string
     quadro_clinico: string
     achados_exame: string
@@ -24,11 +26,7 @@ interface DadosLaudoCompleto {
     conclusao: string
     profissional_nome: string
     profissional_crefito: string
-    cif_funcao: string
-    cif_estrutura: string
-    cif_atividade: string
-    cif_participacao: string
-    cif_contextual: string
+    cifs: { codigo: string; descricao: string; componente: string }[]
     metas_tratamento: string
     criterios_alta: string
     prognostico: string
@@ -64,16 +62,12 @@ function gerarDoc(dados: DadosLaudoCompleto) {
         `Médico solicitante: ${dados.medico_solicitante}`,
         dados.cid ? `CID: ${dados.cid}` : null,
         `Início do tratamento: ${dados.data_inicio}`,
+        dados.data_fim ? `Término do tratamento: ${dados.data_fim}` : null,
         `Frequência semanal: ${dados.frequencia_semanal}`,
         dados.total_sessoes ? `Total de sessões: ${dados.total_sessoes}` : null,
     ])
 
-    if (dados.eva_inicial !== null || dados.eva_atual !== null) {
-        const linhasEva = ['EVA (escala de dor 0-10):']
-        if (dados.eva_inicial !== null) linhasEva.push(`  Inicial: ${dados.eva_inicial}/10`)
-        if (dados.eva_atual !== null) linhasEva.push(`  Atual: ${dados.eva_atual}/10`)
-        docente(doc, 'ESCALA DE DOR (EVA)', linhasEva)
-    }
+    desenharTabelaEVA(doc, dados.eva_inicial, dados.eva_atual)
 
     if (dados.escalas_adicionais.length > 0) {
         const linhas = dados.escalas_adicionais.map((e) => {
@@ -85,11 +79,23 @@ function gerarDoc(dados: DadosLaudoCompleto) {
 
     secao(doc, 'CLASSIFICAÇÃO INTERNACIONAL DE FUNCIONALIDADE (CIF)', '')
 
-    if (dados.cif_funcao) docente(doc, 'Funções do Corpo', [dados.cif_funcao])
-    if (dados.cif_estrutura) docente(doc, 'Estruturas do Corpo', [dados.cif_estrutura])
-    if (dados.cif_atividade) docente(doc, 'Atividade e Participação', [dados.cif_atividade])
-    if (dados.cif_participacao) docente(doc, 'Participação', [dados.cif_participacao])
-    if (dados.cif_contextual) docente(doc, 'Fatores Contextuais', [dados.cif_contextual])
+    if (dados.cifs.length > 0) {
+        const rotulos: [string, string][] = [
+            ['FUNCOES', 'Funções do Corpo'],
+            ['ESTRUTURAS', 'Estruturas do Corpo'],
+            ['ATIVIDADES', 'Atividades e Participação'],
+            ['AMBIENTAIS', 'Fatores Ambientais'],
+        ]
+        for (const [componente, titulo] of rotulos) {
+            const linhas = dados.cifs
+                .filter((c) => c.componente === componente)
+                .map((c) => `${c.codigo}${c.descricao ? ` — ${c.descricao}` : ''}`)
+            if (linhas.length > 0) docente(doc, titulo, linhas)
+        }
+        docente(doc, 'CIF — outras categorias', dados.cifs
+            .filter((c) => !['FUNCOES', 'ESTRUTURAS', 'ATIVIDADES', 'AMBIENTAIS'].includes(c.componente))
+            .map((c) => `${c.codigo}${c.descricao ? ` — ${c.descricao}` : ''}`))
+    }
 
     secao(doc, 'QUADRO CLÍNICO', dados.quadro_clinico)
     secao(doc, 'ACHADOS AO EXAME FÍSICO', dados.achados_exame)

@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { authenticate } from '../middlewares/auth.middleware'
+import { authenticate, authorize } from '../middlewares/auth.middleware'
 import { validar } from '../middlewares/validate.middleware'
 import { criarPacoteSchema } from '../schemas/pacote.schema'
 import {
@@ -9,7 +9,7 @@ import {
 
 const router = Router({ mergeParams: true })
 
-router.post('/pacotes', authenticate, validar(criarPacoteSchema), criarPacote)
-router.get('/pacotes', authenticate, listarPacotes)
+router.post('/pacotes', authenticate, authorize('ADMIN', 'PROFISSIONAL', 'SUPER_ADMIN', 'ATENDENTE'), validar(criarPacoteSchema), criarPacote)
+router.get('/pacotes', authenticate, authorize('ADMIN', 'PROFISSIONAL', 'SUPER_ADMIN', 'ATENDENTE'), listarPacotes)
 
 export default router

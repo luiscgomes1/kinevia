@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import request from 'supertest'
 import app from '../src/server'
 import prisma from '../src/lib/prisma'
-import { criarProfissional, criarPaciente, gerarToken, getAuthHeaders, managePrisma } from './helpers'
+import { criarProfissional, criarPaciente, criarClinica, gerarToken, getAuthHeaders, managePrisma } from './helpers'
 
 managePrisma()
 
@@ -10,9 +10,12 @@ describe('GET /v1/financeiro', () => {
   let profissionalId: string
   let token: string
   let pacienteId: string
+  let clinicaId: string
 
   beforeAll(async () => {
-    const p = await criarProfissional({ email: `fin-${Date.now()}@test.com` })
+    const clinica = await criarClinica(`Fin Clinica ${Date.now()}`)
+    clinicaId = clinica.id
+    const p = await criarProfissional({ email: `fin-${Date.now()}@test.com`, role: 'ADMIN', clinica_id: clinica.id })
     profissionalId = p.id
     token = gerarToken(profissionalId)
     const pac = await criarPaciente(profissionalId)
@@ -32,6 +35,15 @@ describe('GET /v1/financeiro', () => {
     expect(res.status).toBe(401)
   })
 
+  it('rejeita PROFISSIONAL — financeiro é admin-only', async () => {
+    const profProfi = await criarProfissional({ email: `fin-prof-${Date.now()}@test.com` })
+    const res = await request(app)
+      .get('/v1/financeiro')
+      .set(getAuthHeaders(gerarToken(profProfi.id)))
+    expect(res.status).toBe(403)
+    await prisma.profissional.delete({ where: { id: profProfi.id } })
+  })
+
   it('retorna resumo vazio quando não há pacotes', async () => {
     const res = await request(app)
       .get('/v1/financeiro')
@@ -46,8 +58,8 @@ describe('GET /v1/financeiro', () => {
   it('retorna valores corretos com pacotes', async () => {
     await prisma.pacote.createMany({
       data: [
-        { paciente_id: pacienteId, profissional_id: profissionalId, tipo: 'INDIVIDUAL', valor_cobrado: 100, status_pagamento: 'PAGO' },
-        { paciente_id: pacienteId, profissional_id: profissionalId, tipo: 'PACOTE_5', valor_cobrado: 400, status_pagamento: 'AGUARDANDO' },
+        { paciente_id: pacienteId, profissional_id: profissionalId, clinica_id: clinicaId, tipo: 'INDIVIDUAL', quantidade_sessoes: 1, valor_cobrado: 100, status_pagamento: 'PAGO' },
+        { paciente_id: pacienteId, profissional_id: profissionalId, clinica_id: clinicaId, tipo: 'PACOTE_5', quantidade_sessoes: 5, valor_cobrado: 400, status_pagamento: 'AGUARDANDO' },
       ],
     })
 
@@ -79,9 +91,12 @@ describe('GET /v1/financeiro', () => {
 describe('GET /v1/financeiro/pacientes', () => {
   let profissionalId: string
   let token: string
+  let clinicaId: string
 
   beforeAll(async () => {
-    const p = await criarProfissional({ email: `fin-pac-${Date.now()}@test.com` })
+    const clinica = await criarClinica(`Fin Clinica ${Date.now()}`)
+    clinicaId = clinica.id
+    const p = await criarProfissional({ email: `fin-pac-${Date.now()}@test.com`, role: 'ADMIN', clinica_id: clinica.id })
     profissionalId = p.id
     token = gerarToken(profissionalId)
   })
@@ -103,7 +118,7 @@ describe('GET /v1/financeiro/pacientes', () => {
   it('retorna lista com pacientes que possuem pacotes', async () => {
     const pac = await criarPaciente(profissionalId, { nome: 'Paciente Financeiro' })
     await prisma.pacote.create({
-      data: { paciente_id: pac.id, profissional_id: profissionalId, tipo: 'INDIVIDUAL', valor_cobrado: 150, status_pagamento: 'PAGO' },
+      data: { paciente_id: pac.id, profissional_id: profissionalId, clinica_id: clinicaId, tipo: 'INDIVIDUAL', quantidade_sessoes: 1, valor_cobrado: 150, status_pagamento: 'PAGO' },
     })
 
     const res = await request(app)
@@ -118,9 +133,12 @@ describe('GET /v1/financeiro/pacientes/:id', () => {
   let profissionalId: string
   let token: string
   let pacienteId: string
+  let clinicaId: string
 
   beforeAll(async () => {
-    const p = await criarProfissional({ email: `fin-pac-id-${Date.now()}@test.com` })
+    const clinica = await criarClinica(`Fin Clinica ${Date.now()}`)
+    clinicaId = clinica.id
+    const p = await criarProfissional({ email: `fin-pac-id-${Date.now()}@test.com`, role: 'ADMIN', clinica_id: clinica.id })
     profissionalId = p.id
     token = gerarToken(profissionalId)
     const pac = await criarPaciente(profissionalId)
@@ -135,7 +153,7 @@ describe('GET /v1/financeiro/pacientes/:id', () => {
 
   it('retorna financeiro de um paciente específico', async () => {
     await prisma.pacote.create({
-      data: { paciente_id: pacienteId, profissional_id: profissionalId, tipo: 'INDIVIDUAL', valor_cobrado: 200, status_pagamento: 'PAGO' },
+      data: { paciente_id: pacienteId, profissional_id: profissionalId, clinica_id: clinicaId, tipo: 'INDIVIDUAL', quantidade_sessoes: 1, valor_cobrado: 200, status_pagamento: 'PAGO' },
     })
 
     const res = await request(app)
@@ -147,11 +165,13 @@ describe('GET /v1/financeiro/pacientes/:id', () => {
   })
 
   it('retorna 404 para paciente de outro profissional (não revela existência)', async () => {
-    const outro = await criarProfissional({ email: `outro-fin-${Date.now()}@test.com` })
+    const clinicaB = await criarClinica(`Fin Outra Clinica ${Date.now()}`)
+    const outro = await criarProfissional({ email: `outro-fin-${Date.now()}@test.com`, role: 'ADMIN', clinica_id: clinicaB.id })
     const res = await request(app)
       .get(`/v1/financeiro/pacientes/${pacienteId}`)
       .set(getAuthHeaders(gerarToken(outro.id)))
     expect(res.status).toBe(404)
     await prisma.profissional.delete({ where: { id: outro.id } })
+    await prisma.clinica.delete({ where: { id: clinicaB.id } })
   })
 })

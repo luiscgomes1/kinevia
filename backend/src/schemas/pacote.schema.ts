@@ -27,9 +27,9 @@ const sessaoSchema = z.object({
 
 export const criarPacoteSchema = z.object({
     tipo: z.enum(['INDIVIDUAL', 'PACOTE_5', 'PACOTE_10'], {
-        errorMap: () => ({ message: 'O tipo do pacote é obrigatório e deve ser INDIVIDUAL, PACOTE_5 ou PACOTE_10.' }),
+        message: 'O tipo do pacote é obrigatório e deve ser INDIVIDUAL, PACOTE_5 ou PACOTE_10.',
     }),
-    valor_cobrado: z.number().nonnegative({ message: 'O valor cobrado é obrigatório e deve ser um número não negativo.' }),
+    valor_cobrado: z.number().nonnegative({ message: 'O valor cobrado deve ser um número não negativo.' }).optional(),
     status_pagamento: z.enum(['AGUARDANDO', 'PAGO']).optional(),
     sessoes: z.array(sessaoSchema).optional(),
 }).superRefine((dados, ctx) => {
@@ -69,6 +69,6 @@ export const adicionarSessaoSchema = sessaoSchema
 
 export const marcarPagamentoSchema = z.object({
     status_pagamento: z.enum(['AGUARDANDO', 'PAGO'], {
-        errorMap: () => ({ message: 'O status do pagamento é obrigatório e deve ser AGUARDANDO ou PAGO.' })
+        message: 'O status do pagamento é obrigatório e deve ser AGUARDANDO ou PAGO.'
     }),
 })

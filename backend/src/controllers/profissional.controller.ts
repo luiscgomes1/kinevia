@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import prisma from '../lib/prisma';
 import { gerarUrlAssinada } from '../lib/supabase';
+import { wherePaciente, wherePacote, whereLaudo, whereAgendamento } from '../lib/escopo';
 
 export async function buscarPerfil(req: Request, res: Response) {
 
@@ -11,6 +12,8 @@ export async function buscarPerfil(req: Request, res: Response) {
             id: true,
             nome: true,
             email: true,
+            role: true,
+            clinica_id: true,
             crefito: true,
             cidade: true,
             uf: true,
@@ -102,6 +105,54 @@ export async function trocarSenha(req: Request, res: Response) {
     return res.json({ mensagem: 'Senha atualizada com sucesso' });
 }
 
+export async function listarProfissionais(req: Request, res: Response) {
+  const profissionais = await prisma.profissional.findMany({
+    where: req.role === 'SUPER_ADMIN' ? undefined : { clinica_id: req.clinicaId },
+    select: { id: true, nome: true, role: true },
+    orderBy: { nome: 'asc' },
+  });
+
+  res.json(profissionais);
+}
+
+export async function alterarEmail(req: Request, res: Response) {
+    const { senha, novoEmail } = req.body;
+
+    const profissional = await prisma.profissional.findUnique({
+        where: { id: req.profissionalId },
+    });
+
+    if (!profissional) {
+        res.status(404).json({ erro: 'Profissional não encontrado.' });
+        return;
+    }
+
+    const senhaCorreta = await bcrypt.compare(senha, profissional.senha_hash);
+    if (!senhaCorreta) {
+        res.status(400).json({ erro: 'Senha incorreta.' });
+        return;
+    }
+
+    const existente = await prisma.profissional.findUnique({
+        where: { email: novoEmail },
+    });
+
+    if (existente && existente.id !== req.profissionalId) {
+        res.status(409).json({ erro: 'Este email já está em uso.' });
+        return;
+    }
+
+    await prisma.profissional.update({
+        where: { id: req.profissionalId },
+        data: {
+            email: novoEmail,
+            token_version: { increment: 1 },
+        },
+    });
+
+    res.json({ mensagem: 'Email alterado com sucesso. Faça login novamente.' });
+}
+
 export async function verificarSenha(req: Request, res: Response) {
     const { senha } = req.body;
 
@@ -115,4 +166,54 @@ export async function verificarSenha(req: Request, res: Response) {
 
     const valida = await bcrypt.compare(senha, profissional.senha_hash);
     return res.json({ valida });
+}
+
+export async function exportarDados(req: Request, res: Response) {
+  const id = req.profissionalId!;
+
+  const [profissional, pacientes, agendamentos, pacotes, laudos] = await Promise.all([
+    prisma.profissional.findUnique({
+      where: { id },
+      select: { id: true, nome: true, email: true, role: true, crefito: true, cidade: true, uf: true },
+    }),
+    prisma.paciente.findMany({
+      where: { deleted_at: null, ...wherePaciente(req) },
+      include: {
+        prontuario: {
+          include: { evolucoes: true },
+        },
+      },
+      orderBy: { nome: 'asc' },
+    }),
+    prisma.agendamento.findMany({
+      where: whereAgendamento(req),
+      orderBy: { data: 'desc' },
+    }),
+    prisma.pacote.findMany({
+      where: wherePacote(req),
+      include: {
+        sessoes: {
+          include: { agendamento: { select: { data: true, horario: true, status: true } } },
+        },
+      },
+      orderBy: { criado_em: 'desc' },
+    }),
+    prisma.laudo.findMany({
+      where: whereLaudo(req),
+      orderBy: { criado_em: 'desc' },
+    }),
+  ]);
+
+  res.json({
+    exportado_em: new Date().toISOString(),
+    profissional,
+    totalPacientes: pacientes.length,
+    totalAgendamentos: agendamentos.length,
+    totalPacotes: pacotes.length,
+    totalLaudos: laudos.length,
+    pacientes,
+    agendamentos,
+    pacotes,
+    laudos,
+  });
 }

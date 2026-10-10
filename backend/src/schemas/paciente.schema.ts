@@ -138,3 +138,7 @@ export const corrigirIdentidadeSchema = z
     message:
       "Informe ao menos um campo para corrigir: CPF ou data de nascimento.",
   });
+
+export const transferirPacienteSchema = z.object({
+  novo_profissional_id: z.string().uuid('Profissional inválido.'),
+});

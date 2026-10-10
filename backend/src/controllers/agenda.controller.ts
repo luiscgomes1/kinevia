@@ -1,7 +1,10 @@
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import logger from '../lib/logger';
-import { enviarConfirmacao, enviarCancelamento } from '../services/notificacao';
+import { resolverProfissionalAlvo } from '../lib/escopo';
+import { enviarCancelamento } from '../services/notificacao';
+import { criarNotificacao } from '../services/notificacao.service';
+import { registrarAudit } from '../lib/audit';
 
 function gerarHorarios(horarioInicio: string, horarioFim: string): string[] {
     const horarios: string[] = [];
@@ -28,9 +31,24 @@ export async function buscarAgendaDia(req: Request, res: Response) {
         return res.status(400).json({ erro: 'Data é obrigatória (formato: YYYY-MM-DD).' });
     }
 
+    let profissionalId = req.profissionalId;
+    const profissionalFiltro = req.query.profissional_id as string | undefined;
+
+    if (req.role === 'ADMIN' || req.role === 'SUPER_ADMIN' || req.role === 'ATENDENTE') {
+        if (profissionalFiltro) {
+            const alvo = await resolverProfissionalAlvo(req, profissionalFiltro);
+            if (alvo === null) {
+                return res.status(404).json({ erro: 'Profissional não encontrado.' });
+            }
+            profissionalId = alvo;
+        } else if (req.role === 'ADMIN' || req.role === 'SUPER_ADMIN') {
+            return res.status(400).json({ erro: 'Selecione um profissional para visualizar a agenda.' });
+        }
+    }
+
     const profissional = await prisma.profissional.findUnique({
-        where: { id: req.profissionalId },
-        select: { horario_inicio: true, horario_fim: true }
+        where: { id: profissionalId },
+        select: { horario_inicio: true, horario_fim: true, nome: true }
     });
 
     if (!profissional) {
@@ -39,7 +57,7 @@ export async function buscarAgendaDia(req: Request, res: Response) {
 
     const agendamentos = await prisma.agendamento.findMany({
         where: {
-            profissional_id: req.profissionalId,
+            profissional_id: profissionalId,
             data: new Date(dataQuery),
             status: { not: 'DESMARCOU' },
         },
@@ -69,91 +87,25 @@ export async function buscarAgendaDia(req: Request, res: Response) {
 
     return res.json({
         data: dataQuery,
+        profissional_nome: profissional.nome,
         horarios: grade,
     })
-}
-
-export async function criarAgendamento(req: Request, res: Response)  {
-    const { paciente_id, data, horario, slot, tipo } = req.body;
-
-    const paciente = await prisma.paciente.findFirst({
-        where: {
-            id: paciente_id,
-            profissional_id: req.profissionalId,
-        }
-    });
-
-    if (!paciente) {
-        return res.status(404).json({ erro: 'Paciente não encontrado.' });
-    }
-
-    const profissional = await prisma.profissional.findUnique({
-        where: { id: req.profissionalId },
-        select: { horario_inicio: true, horario_fim: true }
-    });
-
-    const horariosValidos = gerarHorarios(profissional!.horario_inicio, profissional!.horario_fim);
-
-    if (!horariosValidos.includes(horario)) {
-        return res.status(400).json({ erro: `Horário fora do expediente configurado (${profissional!.horario_inicio} às ${profissional!.horario_fim}).` });
-    }
-
-    const slotOcupado = await prisma.agendamento.findFirst({
-        where: {
-            profissional_id: req.profissionalId,
-            data: new Date(data),
-            horario,
-            slot,
-            status: { not: 'DESMARCOU' },
-        }
-    });
-
-    if (slotOcupado) {
-        return res.status(400).json({ erro: 'Slot já está ocupado para o horário selecionado.' });
-    }
-
-    const agendamento = await prisma.agendamento.create({
-        data: {
-            paciente_id,
-            profissional_id: req.profissionalId!,
-            data: new Date(data),
-            horario,
-            slot,
-            tipo: tipo || 'SESSAO'
-        },
-        include: {
-            paciente: {
-                select: { id: true, nome: true, email: true, telefone: true }
-            },
-            profissional: {
-                select: { nome: true }
-            }
-        }
-    })
-
-    if (agendamento.paciente.email) {
-        enviarConfirmacao({
-            email: agendamento.paciente.email,
-            pacienteNome: agendamento.paciente.nome,
-            profissionalNome: agendamento.profissional.nome,
-            data,
-            horario,
-            tipo: tipo || 'SESSAO',
-        }).catch((err) => logger.error({ err }, 'Falha ao enviar email de confirmação'));
-    }
-
-    return res.status(201).json(agendamento);
 }
 
 export async function atualizarStatusAgendamento(req: Request, res: Response) {
     const { id } = req.params;
     const { status } = req.body;
 
+    const podeGerenciar = req.role === 'ADMIN' || req.role === 'SUPER_ADMIN'
+    const whereProfissional = podeGerenciar
+        ? (req.role === 'ADMIN' ? { profissional: { clinica_id: req.clinicaId } } : {})
+        : { profissional_id: req.profissionalId }
+
     const agendamento = await prisma.agendamento.findFirst({
-        where: { id, profissional_id: req.profissionalId },
+        where: { id, ...whereProfissional },
         include: {
             paciente: { select: { nome: true, email: true } },
-            profissional: { select: { nome: true } },
+            profissional: { select: { id: true, nome: true } },
         },
     })
 
@@ -184,6 +136,10 @@ export async function atualizarStatusAgendamento(req: Request, res: Response) {
         }
     })
 
+    registrarAudit(req.profissionalId!, 'AGENDAMENTO_STATUS_ALTERADO', agendamentoAtualizado.paciente.id, {
+        status,
+    })
+
     if (status === 'DESMARCOU' && agendamento.paciente.email) {
         const dataStr = `${agendamento.data.getFullYear()}-${String(agendamento.data.getMonth() + 1).padStart(2, '0')}-${String(agendamento.data.getDate()).padStart(2, '0')}`;
         enviarCancelamento({
@@ -193,6 +149,16 @@ export async function atualizarStatusAgendamento(req: Request, res: Response) {
             data: dataStr,
             horario: agendamento.horario,
         }).catch((err) => logger.error({ err }, 'Falha ao enviar email de cancelamento'));
+    }
+
+    if (status === 'DESMARCOU' && agendamento.profissional.id !== req.profissionalId) {
+        const dataBr = `${String(agendamento.data.getDate()).padStart(2, '0')}/${String(agendamento.data.getMonth() + 1).padStart(2, '0')}/${agendamento.data.getFullYear()}`;
+        criarNotificacao(
+            agendamento.profissional.id,
+            'SESSAO_CANCELADA',
+            'Sessão cancelada',
+            `A sessão do paciente ${agendamento.paciente.nome} no dia ${dataBr} às ${agendamento.horario} foi cancelada.`,
+        ).catch((err) => logger.error({ err }, 'Falha ao criar notificação de cancelamento'));
     }
 
     return res.json(agendamentoAtualizado);
@@ -209,9 +175,24 @@ export async function resumoMes(req: Request, res: Response) {
     const dataInicio = new Date(Date.UTC(ano, mes - 1, 1))
     const dataFim = new Date(Date.UTC(ano, mes, 0, 23, 59, 59))
 
+    let profissionalId = req.profissionalId;
+    const profissionalFiltro = req.query.profissional_id as string | undefined;
+
+    if (req.role === 'ADMIN' || req.role === 'SUPER_ADMIN' || req.role === 'ATENDENTE') {
+        if (profissionalFiltro) {
+            const alvo = await resolverProfissionalAlvo(req, profissionalFiltro);
+            if (alvo === null) {
+                return res.status(404).json({ erro: 'Profissional não encontrado.' });
+            }
+            profissionalId = alvo;
+        } else if (req.role === 'ADMIN' || req.role === 'SUPER_ADMIN') {
+            return res.status(400).json({ erro: 'Selecione um profissional para visualizar a agenda.' });
+        }
+    }
+
     const dias = await prisma.agendamento.findMany({
         where: {
-            profissional_id: req.profissionalId,
+            profissional_id: profissionalId,
             data: { gte: dataInicio, lte: dataFim },
             status: { not: 'DESMARCOU' },
         },

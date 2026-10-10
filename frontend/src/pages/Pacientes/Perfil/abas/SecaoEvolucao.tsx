@@ -2,7 +2,8 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { EscalaDor } from '@/components/ui/escala-dor'
-import { Plus, Save, Loader2, Clock } from 'lucide-react'
+import { Plus, Save, Loader2, Clock, PencilLine } from 'lucide-react'
+import { useState } from 'react'
 import type { Evolucao } from './Prontuario'
 
 function formatarDataHora(data: string): string {
@@ -27,14 +28,32 @@ interface Props {
   onToggleForm: () => void
   onSalvarEvolucao: () => void
   onCancelarEvolucao?: () => void
+  onCorrigirEvolucao: (evolucaoId: string, correcaoTexto: string) => Promise<void>
 }
 
 export default function SecaoEvolucao({
   evolucoes, novaEvolucao, onNovaEvolucaoChange,
   novaEva, onNovaEvaChange,
   salvandoEvolucao, mostrarForm, onToggleForm,
-  onSalvarEvolucao, onCancelarEvolucao
+  onSalvarEvolucao, onCancelarEvolucao, onCorrigirEvolucao
 }: Props) {
+  const [corrigindoId, setCorrigindoId] = useState<string | null>(null)
+  const [correcaoTexto, setCorrecaoTexto] = useState('')
+  const [salvandoCorrecao, setSalvandoCorrecao] = useState(false)
+
+  async function handleSalvarCorrecao(evolucaoId: string) {
+    if (!correcaoTexto.trim()) return
+    setSalvandoCorrecao(true)
+    try {
+      await onCorrigirEvolucao(evolucaoId, correcaoTexto.trim())
+      setCorrigindoId(null)
+      setCorrecaoTexto('')
+    } catch {
+      // erro já tratado no pai — mantém o formulário aberto
+    } finally {
+      setSalvandoCorrecao(false)
+    }
+  }
   return (
     <>
       {/* Divisor */}
@@ -117,13 +136,51 @@ export default function SecaoEvolucao({
               <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
                 {ev.texto}
               </p>
-              {ev.correcao_texto && (
+              {ev.correcao_texto ? (
                 <div className="mt-2 pt-2 border-t border-amber-200 bg-amber-50 rounded px-2 py-1.5">
                   <p className="text-xs text-amber-600 font-medium mb-0.5">
                     Correção — {formatarDataHora(ev.correcao_em!)}
                   </p>
                   <p className="text-xs text-amber-700">{ev.correcao_texto}</p>
                 </div>
+              ) : corrigindoId === ev.id ? (
+                <div className="mt-3 space-y-2">
+                  <Textarea
+                    value={correcaoTexto}
+                    onChange={(e) => setCorrecaoTexto(e.target.value)}
+                    rows={2}
+                    placeholder="Descreva a correção do registro..."
+                    className="flex w-full rounded-md border border-input bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
+                  />
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={salvandoCorrecao || !correcaoTexto.trim()}
+                      onClick={() => { void handleSalvarCorrecao(ev.id) }}
+                      className="gap-1.5"
+                    >
+                      {salvandoCorrecao ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                      {salvandoCorrecao ? 'Salvando...' : 'Salvar correção'}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => { setCorrigindoId(null); setCorrecaoTexto('') }}
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => { setCorrigindoId(ev.id); setCorrecaoTexto('') }}
+                  className="mt-2 flex items-center gap-1.5 text-xs font-medium text-amber-600 hover:text-amber-700 hover:underline transition-colors"
+                >
+                  <PencilLine className="w-3.5 h-3.5" />
+                  Corrigir registro
+                </button>
               )}
             </div>
           ))}

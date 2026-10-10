@@ -10,6 +10,13 @@ interface Props {
     onChangeAssinatura: (tipo: 'DIGITAL' | 'MANUSCRITA') => void
 }
 
+function qualificarDor(valor: number): string {
+    if (valor <= 0) return 'sem dor'
+    if (valor <= 3) return 'leve'
+    if (valor <= 6) return 'moderada'
+    return 'intensa'
+}
+
 const ClinicoForm = memo(function ClinicoForm({ conteudo, onChange, tipoAssinatura, onChangeAssinatura }: Props) {
     return (
         <div className="space-y-4 pt-2">
@@ -53,12 +60,22 @@ const ClinicoForm = memo(function ClinicoForm({ conteudo, onChange, tipoAssinatu
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-1.5">
                     <Label>Início do tratamento</Label>
                     <input
+                        type="date"
                         value={conteudo.data_inicio}
                         onChange={(e) => onChange({ data_inicio: e.target.value })}
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    />
+                </div>
+                <div className="space-y-1.5">
+                    <Label>Término do tratamento</Label>
+                    <input
+                        type="date"
+                        value={conteudo.data_fim}
+                        onChange={(e) => onChange({ data_fim: e.target.value })}
                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     />
                 </div>
@@ -95,10 +112,10 @@ const ClinicoForm = memo(function ClinicoForm({ conteudo, onChange, tipoAssinatu
                     <Label className="text-xs text-muted-foreground">Escala de dor (EVA 0-10)</Label>
                     <div className="flex gap-4 text-sm">
                         {conteudo.eva_inicial !== null && (
-                            <span>Inicial: <strong>{conteudo.eva_inicial}/10</strong></span>
+                            <span>Inicial: <strong>{conteudo.eva_inicial}/10</strong> <span className="text-muted-foreground text-xs">({qualificarDor(conteudo.eva_inicial)})</span></span>
                         )}
                         {conteudo.eva_atual !== null && (
-                            <span>Atual: <strong>{conteudo.eva_atual}/10</strong></span>
+                            <span>Atual: <strong>{conteudo.eva_atual}/10</strong> <span className="text-muted-foreground text-xs">({qualificarDor(conteudo.eva_atual)})</span></span>
                         )}
                     </div>
                 </div>

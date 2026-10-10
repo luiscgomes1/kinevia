@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { DayPicker } from 'react-day-picker'
 import { ptBR } from 'date-fns/locale'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Users } from 'lucide-react'
 import { TimelineDia } from './TimelineDia'
 import { VisaoSemanal } from './VisaoSemanal'
 import { VisaoMensal } from './VisaoMensal'
@@ -17,7 +17,8 @@ function formatarDataExibicao(data: Date): string {
 }
 
 function AgendaContent() {
-  const { dataSelecionada, setDataSelecionada, visao, setVisao } = useAgenda()
+  const { dataSelecionada, setDataSelecionada, visao, setVisao, profissionalFiltroId, setProfissionalFiltroId, profissionaisDisponiveis } = useAgenda()
+  const precisaFiltrar = profissionaisDisponiveis.length > 0 && !profissionalFiltroId
   const [mostrarCalendarioMobile, setMostrarCalendarioMobile] = useState(false)
 
   function avancarDia(direcao: 1 | -1) {
@@ -44,7 +45,7 @@ function AgendaContent() {
         {visao !== 'mensal' && (
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-              <button onClick={() => avancarDia(-1)} className="p-1.5 rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0">
+              <button onClick={() => avancarDia(-1)} aria-label="Dia anterior" className="p-1.5 rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0">
                 <ChevronLeft className="w-5 h-5" />
               </button>
               <button
@@ -55,13 +56,29 @@ function AgendaContent() {
                   {formatarDataExibicao(dataSelecionada)}
                 </h1>
               </button>
-              <button onClick={() => avancarDia(1)} className="p-1.5 rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0">
+              <button onClick={() => avancarDia(1)} aria-label="Próximo dia" className="p-1.5 rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0">
                 <ChevronRight className="w-5 h-5" />
               </button>
               <button onClick={() => setDataSelecionada(new Date())} className="text-xs text-primary hover:underline shrink-0 ml-2">
                 Hoje
               </button>
             </div>
+
+            {profissionaisDisponiveis.length > 0 && (
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-muted-foreground shrink-0" />
+                <select
+                  value={profissionalFiltroId}
+                  onChange={(e) => setProfissionalFiltroId(e.target.value)}
+                  className="h-8 px-2 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                >
+                  <option value="">Selecione um profissional</option>
+                  {profissionaisDisponiveis.map((p) => (
+                    <option key={p.id} value={p.id}>{p.nome}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         )}
 
@@ -101,7 +118,13 @@ function AgendaContent() {
           </div>
         )}
 
-        {visao === 'mensal' ? <VisaoMensal /> : visao === 'semanal' ? <VisaoSemanal /> : <TimelineDia />}
+        {precisaFiltrar ? (
+          <div className="bg-card rounded-xl border border-border p-10 text-center">
+            <Users className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+            <p className="text-sm font-medium text-foreground">Selecione um profissional acima</p>
+            <p className="text-xs text-muted-foreground mt-1">Escolha um profissional para visualizar a agenda.</p>
+          </div>
+        ) : visao === 'mensal' ? <VisaoMensal /> : visao === 'semanal' ? <VisaoSemanal /> : <TimelineDia />}
       </div>
 
       <ModalAgendamentoRapido />

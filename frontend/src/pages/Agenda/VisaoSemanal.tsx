@@ -47,7 +47,7 @@ function inicioDaSemana(data: Date): Date {
 }
 
 const VisaoSemanal = memo(function VisaoSemanal() {
-  const { dataSelecionada, setDataSelecionada, setTriggerRapido, chaveRecarga, setVisao } = useAgenda()
+  const { dataSelecionada, setDataSelecionada, setTriggerRapido, chaveRecarga, setVisao, profissionalFiltroId } = useAgenda()
   const [grades, setGrades] = useState<GradeAgenda[]>([])
   const [carregando, setCarregando] = useState(true)
 
@@ -63,7 +63,11 @@ const VisaoSemanal = memo(function VisaoSemanal() {
     setCarregando(true)
     try {
       const respostas = await Promise.all(
-        dias.map((d) => api.get(`/agenda?data=${formatarDataISO(d)}`))
+        dias.map((d) => {
+          const params = new URLSearchParams({ data: formatarDataISO(d) })
+          if (profissionalFiltroId) params.set('profissional_id', profissionalFiltroId)
+          return api.get(`/agenda?${params.toString()}`)
+        })
       )
       setGrades(respostas.map((r) => r.data))
     } catch {
@@ -72,7 +76,7 @@ const VisaoSemanal = memo(function VisaoSemanal() {
       setCarregando(false)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [segundaISO])
+  }, [segundaISO, profissionalFiltroId])
 
   useEffect(() => {
     carregarSemana()

@@ -25,6 +25,7 @@ interface SessaoPacote {
 
 interface Pacote {
   id: string
+  profissional_id: string
   tipo: 'INDIVIDUAL' | 'PACOTE_5' | 'PACOTE_10'
   valor_cobrado: number
   status_pagamento: 'AGUARDANDO' | 'PAGO'
@@ -34,6 +35,7 @@ interface Pacote {
   sessoes_realizadas: number
   sessoes_agendadas: number
   sessoes_limite: number
+  quantidade_sessoes: number
 }
 
 function formatarData(data: string): string {
@@ -188,7 +190,9 @@ const SessoesTab = memo(function SessoesTab({ pacienteId }: Props) {
     setHorarioEscolhido(null)
     setSlotEscolhido(null)
     try {
-      const response = await api.get(`/agenda?data=${formatarDataISO(dataAgendar)}`)
+      const params = new URLSearchParams({ data: formatarDataISO(dataAgendar) })
+      if (pacoteAgendando?.profissional_id) params.set('profissional_id', pacoteAgendando.profissional_id)
+      const response = await api.get(`/agenda?${params.toString()}`)
       setGradeAgendar(response.data)
       setEtapaAgendar('slot')
     } catch (err) {

@@ -3,6 +3,8 @@ import { createContext, useContext, useState, useEffect, useCallback, type React
 import { toast } from 'sonner'
 import { formatarDataISO } from '@/lib/data'
 import api from '@/services/api'
+import { useProfissional } from '@/hooks/useProfissional'
+import { useProfissionais } from '@/hooks/useProfissionais'
 
 export interface Paciente {
   id: string
@@ -30,6 +32,7 @@ interface Horario {
 
 export interface GradeAgenda {
   data: string
+  profissional_nome?: string
   horarios: Horario[]
 }
 
@@ -63,11 +66,18 @@ interface AgendaContextType {
   fecharMarcarSessao: () => void
   recarregar: () => void
   chaveRecarga: number
+  profissionalFiltroId: string
+  setProfissionalFiltroId: (id: string) => void
+  profissionaisDisponiveis: { id: string; nome: string }[]
 }
 
 const AgendaContext = createContext<AgendaContextType | null>(null)
 
 export function AgendaProvider({ children }: { children: ReactNode }) {
+  const { profissional } = useProfissional()
+  const podeFiltrar = profissional && (profissional.role === 'ADMIN' || profissional.role === 'SUPER_ADMIN')
+  const { profissionais: profissionaisDisponiveis } = useProfissionais({ habilitado: podeFiltrar === true })
+
   const [dataSelecionada, setDataSelecionada] = useState<Date>(new Date())
   const [grade, setGrade] = useState<GradeAgenda | null>(null)
   const [carregando, setCarregando] = useState(true)
@@ -79,17 +89,28 @@ export function AgendaProvider({ children }: { children: ReactNode }) {
   const [carregandoResumo, setCarregandoResumo] = useState(false)
   const [triggerRapido, setTriggerRapido] = useState<TriggerAgendamentoRapido | null>(null)
   const [pacienteMarcar, setPacienteMarcar] = useState<Paciente | null>(null)
+  const [profissionalFiltroId, setProfissionalFiltroId] = useState('')
 
   const ehHoje = formatarDataISO(dataSelecionada) === formatarDataISO(new Date())
 
+  const profissionalPrecisaFiltrar = podeFiltrar && !profissionalFiltroId
+
+  const montarParamsAgenda = useCallback(() => {
+    const params = new URLSearchParams()
+    params.set('data', formatarDataISO(dataSelecionada))
+    if (profissionalFiltroId) params.set('profissional_id', profissionalFiltroId)
+    return params.toString()
+  }, [dataSelecionada, profissionalFiltroId])
+
     const carregarGrade = useCallback(async () => {
+    if (profissionalPrecisaFiltrar) return
     try {
-      const response = await api.get(`/agenda?data=${formatarDataISO(dataSelecionada)}`)
+      const response = await api.get(`/agenda?${montarParamsAgenda()}`)
       setGrade(response.data)
     } catch {
       toast.error('Não foi possível carregar a agenda deste dia.')
     }
-  }, [dataSelecionada])
+  }, [montarParamsAgenda, profissionalPrecisaFiltrar])
 
   useEffect(() => {
     ;(async () => {
@@ -101,15 +122,18 @@ export function AgendaProvider({ children }: { children: ReactNode }) {
   }, [carregarGrade])
 
   const carregarResumoMes = useCallback(async (data: Date) => {
+    if (profissionalPrecisaFiltrar) { setDiasComAgendamento([]); return }
     const ano = data.getFullYear()
     const mes = data.getMonth() + 1
     try {
-      const response = await api.get(`/agenda/resumo-mes?ano=${ano}&mes=${mes}`)
+      const params = new URLSearchParams({ ano: String(ano), mes: String(mes) })
+      if (profissionalFiltroId) params.set('profissional_id', profissionalFiltroId)
+      const response = await api.get(`/agenda/resumo-mes?${params}`)
       setDiasComAgendamento(response.data.dias)
     } catch {
       setDiasComAgendamento([])
     }
-  }, [])
+  }, [profissionalFiltroId, profissionalPrecisaFiltrar])
 
   useEffect(() => {
     ;(async () => {
@@ -134,9 +158,12 @@ export function AgendaProvider({ children }: { children: ReactNode }) {
   }, [carregarGrade])
 
   useEffect(() => {
-    if (chaveRecarga > 0) {
-      carregarResumoMes(mesSelecionado)
+    async function inicial() {
+      if (chaveRecarga > 0) {
+        await carregarResumoMes(mesSelecionado)
+      }
     }
+    void inicial()
   }, [chaveRecarga, mesSelecionado, carregarResumoMes])
 
   const atualizarStatus = useCallback(async (agendamentoId: string, status: 'COMPARECEU' | 'FALTOU' | 'DESMARCOU') => {
@@ -181,6 +208,9 @@ export function AgendaProvider({ children }: { children: ReactNode }) {
     fecharMarcarSessao,
     recarregar,
     chaveRecarga,
+    profissionalFiltroId,
+    setProfissionalFiltroId,
+    profissionaisDisponiveis,
   }
 
   return (

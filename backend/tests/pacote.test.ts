@@ -113,7 +113,7 @@ describe('GET /v1/pacientes/:id/pacotes', () => {
     const pac = await criarPaciente(profissionalId)
     pacienteId = pac.id
     await prisma.pacote.create({
-      data: { paciente_id: pacienteId, profissional_id: profissionalId, tipo: 'INDIVIDUAL', valor_cobrado: 100 },
+      data: { paciente_id: pacienteId, profissional_id: profissionalId, tipo: 'INDIVIDUAL', quantidade_sessoes: 1, valor_cobrado: 100 },
     })
   })
 

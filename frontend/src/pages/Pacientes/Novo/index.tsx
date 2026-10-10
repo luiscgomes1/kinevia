@@ -1,18 +1,21 @@
-import { useRef, useEffect } from 'react'
+﻿import { useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useBlocker } from 'react-router-dom'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch, type FieldErrors } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
 import { ArrowLeft, Save, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { formatarCPF, formatarTelefone } from '@/lib/masks'
 import { criarPacienteSchema, type CriarPacienteForm } from '@/lib/schemas/paciente'
 import api, { exibirErro } from '@/services/api'
+
+function Erro({ errors, campo }: { errors: FieldErrors<CriarPacienteForm>; campo: keyof CriarPacienteForm }) {
+  return errors[campo] ? <p className="text-xs text-red-500 mt-1">{errors[campo]?.message}</p> : null
+}
 
 export default function NovoPacientePage() {
   const navigate = useNavigate()
@@ -20,7 +23,7 @@ export default function NovoPacientePage() {
   const {
     register,
     handleSubmit,
-    watch,
+    control,
     formState: { errors, isSubmitting },
     setValue,
   } = useForm<CriarPacienteForm>({
@@ -41,10 +44,12 @@ export default function NovoPacientePage() {
     },
   })
 
-  const valoresIniciais = useRef(JSON.stringify(watch()))
+  const valoresForm = useWatch({ control })
+
+  const valoresIniciais = useRef(JSON.stringify(valoresForm))
 
   function isDirty(): boolean {
-    return JSON.stringify(watch()) !== valoresIniciais.current
+    return JSON.stringify(valoresForm) !== valoresIniciais.current
   }
 
   const blocker = useBlocker(isDirty)
@@ -85,12 +90,8 @@ export default function NovoPacientePage() {
     }
   }
 
-  const Erro = ({ campo }: { campo: keyof CriarPacienteForm }) =>
-    errors[campo] ? <p className="text-xs text-red-500 mt-1">{errors[campo]?.message}</p> : null
-
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-
       <div className="flex items-center gap-3">
         <button
           onClick={() => navigate('/pacientes')}
@@ -111,7 +112,7 @@ export default function NovoPacientePage() {
           <div className="space-y-1.5">
             <Label htmlFor="nome">Nome completo *</Label>
             <Input id="nome" {...register('nome')} placeholder="Nome completo do paciente" />
-            <Erro campo="nome" />
+            <Erro errors={errors} campo="nome" />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -124,12 +125,12 @@ export default function NovoPacientePage() {
                 maxLength={14}
                 onChange={(e) => setValue('cpf', formatarCPF(e.target.value), { shouldValidate: true })}
               />
-              <Erro campo="cpf" />
+              <Erro errors={errors} campo="cpf" />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="data_nascimento">Data de nascimento *</Label>
               <Input id="data_nascimento" type="date" {...register('data_nascimento')} />
-              <Erro campo="data_nascimento" />
+              <Erro errors={errors} campo="data_nascimento" />
             </div>
           </div>
 
@@ -139,7 +140,7 @@ export default function NovoPacientePage() {
             <div className="grid grid-cols-3 gap-3">
               <div className="col-span-2 space-y-1.5">
                 <Input {...register('rua')} placeholder="Rua / Avenida" />
-                <Erro campo="rua" />
+                <Erro errors={errors} campo="rua" />
               </div>
               <div className="space-y-1.5">
                 <Input {...register('numero')} placeholder="Número" />
@@ -149,11 +150,11 @@ export default function NovoPacientePage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Input {...register('bairro')} placeholder="Bairro" />
-                <Erro campo="bairro" />
+                <Erro errors={errors} campo="bairro" />
               </div>
               <div className="space-y-1.5">
                 <Input {...register('cidade')} placeholder="Cidade" />
-                <Erro campo="cidade" />
+                <Erro errors={errors} campo="cidade" />
               </div>
             </div>
           </div>
@@ -161,7 +162,7 @@ export default function NovoPacientePage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label htmlFor="estado_civil">Estado civil *</Label>
-              <Select
+              <select
                 id="estado_civil"
                 {...register('estado_civil')}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 text-foreground"
@@ -172,13 +173,13 @@ export default function NovoPacientePage() {
                 <option value="Divorciado(a)">Divorciado(a)</option>
                 <option value="Viúvo(a)">Viúvo(a)</option>
                 <option value="União estável">União estável</option>
-              </Select>
-              <Erro campo="estado_civil" />
+              </select>
+              <Erro errors={errors} campo="estado_civil" />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="nacionalidade">Nacionalidade *</Label>
               <Input id="nacionalidade" {...register('nacionalidade')} placeholder="Brasileira" />
-              <Erro campo="nacionalidade" />
+              <Erro errors={errors} campo="nacionalidade" />
             </div>
           </div>
         </div>
@@ -196,12 +197,12 @@ export default function NovoPacientePage() {
                 maxLength={15}
                 onChange={(e) => setValue('telefone', formatarTelefone(e.target.value), { shouldValidate: true })}
               />
-              <Erro campo="telefone" />
+              <Erro errors={errors} campo="telefone" />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="email">E-mail</Label>
               <Input id="email" type="email" {...register('email')} placeholder="paciente@email.com" />
-              <Erro campo="email" />
+              <Erro errors={errors} campo="email" />
             </div>
           </div>
 

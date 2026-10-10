@@ -1,5 +1,7 @@
 import api from '@/services/api'
-import type { TipoPacote, StatusPagamento, Precos, PacoteResumo } from '@/types/api'
+import type { TipoPacote, Precos, PacoteResumo } from '@/types/api'
+
+export type { TipoPacote, Precos, PacoteResumo } from '@/types/api'
 
 export const LIMITE_SESSOES_POR_TIPO: Record<TipoPacote, number> = {
   INDIVIDUAL: 1,

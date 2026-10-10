@@ -34,16 +34,17 @@ const baseConteudoSchema = z.object({
   eva_inicial: z.number().int().min(0).max(10).nullable().optional(),
   eva_atual: z.number().int().min(0).max(10).nullable().optional(),
   data_inicio: dataOpcionalSchema.optional(),
+  data_fim: dataOpcionalSchema.optional(),
   frequencia_semanal: textoCurtoSchema.optional(),
   cpf_paciente: textoCurtoSchema.optional(),
 })
 
 const completoConteudoSchema = baseConteudoSchema.extend({
-  cif_funcao: textoClinicoSchema.optional(),
-  cif_estrutura: textoClinicoSchema.optional(),
-  cif_atividade: textoClinicoSchema.optional(),
-  cif_participacao: textoClinicoSchema.optional(),
-  cif_contextual: textoClinicoSchema.optional(),
+  cifs: z.array(z.object({
+    codigo: z.string().min(1).max(20),
+    descricao: z.string().max(255).optional(),
+    componente: z.enum(['FUNCOES', 'ESTRUTURAS', 'ATIVIDADES', 'AMBIENTAIS']).optional(),
+  })).optional(),
   metas_tratamento: textoLongoSchema.optional(),
   criterios_alta: textoClinicoSchema.optional(),
   prognostico: textoClinicoSchema.optional(),

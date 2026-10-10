@@ -2,6 +2,7 @@ import { beforeAll, afterAll } from 'vitest'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import prisma from '../src/lib/prisma'
+import { JWT_ISSUER, JWT_AUDIENCE } from '../src/lib/jwt'
 
 let dbDisponivel = false
 
@@ -28,7 +29,7 @@ export function gerarToken(profissionalId: string, tokenVersion = 1): string {
   return jwt.sign(
     { id: profissionalId, token_version: tokenVersion },
     process.env.JWT_SECRET || 'test-secret-key',
-    { expiresIn: '15m' },
+    { expiresIn: '15m', issuer: JWT_ISSUER, audience: JWT_AUDIENCE },
   )
 }
 
@@ -36,7 +37,7 @@ export function gerarRefreshToken(profissionalId: string, tokenVersion = 1): str
   return jwt.sign(
     { id: profissionalId, token_version: tokenVersion },
     process.env.JWT_REFRESH_SECRET || 'test-refresh-secret-key',
-    { expiresIn: '30d' },
+    { expiresIn: '30d', issuer: JWT_ISSUER, audience: JWT_AUDIENCE },
   )
 }
 
@@ -48,6 +49,9 @@ export async function criarProfissional(override: Partial<{
   cidade: string
   uf: string
   token_version: number
+  role: string
+  clinica_id: string
+  senha_temporaria: boolean
 }> = {}) {
   const senhaHash = await bcrypt.hash(override.senha || 'Teste1234', 10)
   return prisma.profissional.create({
@@ -59,6 +63,9 @@ export async function criarProfissional(override: Partial<{
       cidade: override.cidade || 'Rio de Janeiro',
       uf: override.uf || 'RJ',
       token_version: override.token_version ?? 1,
+      ...(override.role && { role: override.role as any }),
+      ...(override.clinica_id && { clinica_id: override.clinica_id }),
+      ...(override.senha_temporaria !== undefined && { senha_temporaria: override.senha_temporaria }),
     },
   })
 }
@@ -72,8 +79,13 @@ export async function criarPaciente(profissionalId: string, override: Partial<{
   nacionalidade: string
   telefone: string
   email: string
+  clinica_id: string | null
 }> = {}) {
   const cpfRaw = override.cpf || '52998224725'
+  const prof = await prisma.profissional.findUnique({
+    where: { id: profissionalId },
+    select: { clinica_id: true },
+  })
   return prisma.paciente.create({
     data: {
       nome: override.nome || 'Paciente Teste',
@@ -85,8 +97,15 @@ export async function criarPaciente(profissionalId: string, override: Partial<{
       telefone: override.telefone || '21999999999',
       email: override.email,
       profissional_id: profissionalId,
+      clinica_id: override.clinica_id !== undefined ? override.clinica_id : (prof?.clinica_id ?? null),
     },
   })
+}
+
+export async function criarClinica(nome?: string) {
+  return prisma.clinica.create({
+    data: { nome: nome || `Clinica ${Date.now()}` },
+  });
 }
 
 export function getAuthHeaders(token: string): Record<string, string> {

@@ -241,3 +241,57 @@ describe('PATCH /v1/evolucoes/:id/correcao', () => {
     expect(res.status).toBe(400)
   })
 })
+
+describe('Auditoria de evolução', () => {
+  let profissionalId: string
+  let token: string
+  let pacienteId: string
+  let evolucaoId: string
+
+  beforeAll(async () => {
+    const p = await criarProfissional({ email: `audit-evol-${Date.now()}@test.com` })
+    profissionalId = p.id
+    token = gerarToken(profissionalId)
+    const pac = await criarPaciente(profissionalId)
+    pacienteId = pac.id
+    await request(app)
+      .put(`/v1/pacientes/${pacienteId}/prontuario`)
+      .set(getAuthHeaders(token))
+      .send({ queixa_principal: 'Teste' })
+    const evolRes = await request(app)
+      .post(`/v1/pacientes/${pacienteId}/evolucoes`)
+      .set(getAuthHeaders(token))
+      .send({ texto: 'Evolução auditada' })
+    evolucaoId = evolRes.body.id
+  })
+
+  afterAll(async () => {
+    await prisma.auditLog.deleteMany({ where: { profissional_id: profissionalId } })
+    await prisma.evolucao.deleteMany({ where: { prontuario: { paciente: { profissional_id: profissionalId } } } })
+    await prisma.prontuario.deleteMany({ where: { paciente: { profissional_id: profissionalId } } })
+    await prisma.paciente.deleteMany({ where: { profissional_id: profissionalId } })
+    await prisma.profissional.delete({ where: { id: profissionalId } })
+  })
+
+  it('registra EVOLUCAO_CRIADA ao criar evolução', async () => {
+    const log = await prisma.auditLog.findFirst({
+      where: { profissional_id: profissionalId, acao: 'EVOLUCAO_CRIADA', paciente_id: pacienteId },
+      orderBy: { criado_em: 'desc' },
+    })
+    expect(log).not.toBeNull()
+    expect((log!.metadata as any).evolucao_id).toBe(evolucaoId)
+  })
+
+  it('registra EVOLUCAO_CORRIGIDA ao corrigir evolução', async () => {
+    await request(app)
+      .patch(`/v1/evolucoes/${evolucaoId}/correcao`)
+      .set(getAuthHeaders(token))
+      .send({ correcao_texto: 'Correção auditada.' })
+    const log = await prisma.auditLog.findFirst({
+      where: { profissional_id: profissionalId, acao: 'EVOLUCAO_CORRIGIDA', paciente_id: pacienteId },
+      orderBy: { criado_em: 'desc' },
+    })
+    expect(log).not.toBeNull()
+    expect((log!.metadata as any).evolucao_id).toBe(evolucaoId)
+  })
+})

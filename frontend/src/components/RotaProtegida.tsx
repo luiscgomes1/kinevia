@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { useSetupCheck } from '@/hooks/useSetupCheck'
 import { getAccessToken, clearAccessToken, tentarRestaurarSessao } from '@/services/api'
 
-type Estado = 'carregando' | 'valido' | 'invalido'
+type Estado = 'carregando' | 'valido' | 'invalido' | 'trocarSenha'
 
 export default function RotaProtegida({ children }: { children: React.ReactNode }) {
   const [estado, setEstado] = useState<Estado>('carregando')
@@ -28,6 +28,10 @@ export default function RotaProtegida({ children }: { children: React.ReactNode 
           setEstado('invalido')
           return
         }
+        if (payload.senha_temporaria) {
+          setEstado('trocarSenha')
+          return
+        }
       } catch {
         clearAccessToken()
         setEstado('invalido')
@@ -39,6 +43,7 @@ export default function RotaProtegida({ children }: { children: React.ReactNode 
 
   if (estado === 'carregando') return null
   if (estado === 'invalido') return <Navigate to="/login" replace />
+  if (estado === 'trocarSenha') return <Navigate to="/trocar-senha" replace />
   if (estado !== 'valido') return null
   if (carregando) return null
   if (!completo) return <Navigate to="/configuracoes?setup=true" replace />

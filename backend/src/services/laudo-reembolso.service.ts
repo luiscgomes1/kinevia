@@ -1,6 +1,7 @@
 import PDFDocument from 'pdfkit'
 import type { Response } from 'express'
 import * as stream from 'stream'
+import { desenharTabelaEVA } from './pdf-tools'
 
 interface EscalaAdicional {
     nome: string
@@ -96,10 +97,7 @@ function gerarDoc(dados: DadosLaudoReembolso) {
     ])
 
     if (dados.eva_inicial !== null || dados.eva_atual !== null) {
-        const linhasEva = ['EVA (escala de dor 0-10):']
-        if (dados.eva_inicial !== null) linhasEva.push(`  Inicial: ${dados.eva_inicial}/10`)
-        if (dados.eva_atual !== null) linhasEva.push(`  Atual: ${dados.eva_atual}/10`)
-        docente(doc, 'ESCALA DE DOR', linhasEva)
+        desenharTabelaEVA(doc, dados.eva_inicial, dados.eva_atual)
     }
 
     secao(doc, 'QUADRO CLÍNICO', dados.quadro_clinico)

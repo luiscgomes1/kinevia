@@ -17,25 +17,19 @@ const horarioSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, {
     message: 'O horário deve estar no formato HH:mm.'
 })
 
-export const criarAgendamentoSchema = z.object({
-    paciente_id: z.string().uuid({ message: 'O ID do paciente deve ser um UUID válido.' }),
-    data: dataSchema,
-    horario: horarioSchema,
-    slot: z.number().int().min(1).max(3, 'O slot deve ser 1, 2 ou 3.'),
-    tipo: z.enum(['AVALIACAO', 'SESSAO', 'REPOSICAO']).optional(),
-})
-
 export const buscarAgendaDiaSchema = z.object({
   data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato deve ser YYYY-MM-DD.'),
+  profissional_id: z.string().uuid().optional(),
 })
 
 export const resumoMesSchema = z.object({
   ano: z.string().regex(/^\d{4}$/, 'Ano deve ter 4 dígitos.'),
   mes: z.string().regex(/^(1[0-2]|[1-9])$/, 'Mês deve ser 1-12.'),
+  profissional_id: z.string().uuid().optional(),
 })
 
 export const atualizarStatusSchema = z.object({
     status: z.enum(['AGENDADO', 'COMPARECEU', 'FALTOU', 'DESMARCOU'], {
-        errorMap: () => ({ message: 'Status inválido. Use: AGENDADO, COMPARECEU, FALTOU ou DESMARCOU.' }),
+        message: 'Status inválido. Use: AGENDADO, COMPARECEU, FALTOU ou DESMARCOU.',
     })
 })

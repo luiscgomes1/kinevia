@@ -1,8 +1,11 @@
+import type { ItemCIF } from './cifs-data'
+
 export interface Laudo {
     id: string
     tipo: 'CLINICO' | 'COMPLETO' | 'REEMBOLSO'
     tipo_assinatura: 'DIGITAL' | 'MANUSCRITA'
     pdf_url: string | null
+    pdf_path: string | null
     criado_em: string
 }
 
@@ -19,15 +22,12 @@ export interface ConteudoBase {
     eva_inicial: number | null
     eva_atual: number | null
     data_inicio: string
+    data_fim: string
     frequencia_semanal: string
 }
 
 export interface ConteudoCompleto extends ConteudoBase {
-    cif_funcao: string
-    cif_estrutura: string
-    cif_atividade: string
-    cif_participacao: string
-    cif_contextual: string
+    cifs: ItemCIF[]
     metas_tratamento: string
     criterios_alta: string
     prognostico: string

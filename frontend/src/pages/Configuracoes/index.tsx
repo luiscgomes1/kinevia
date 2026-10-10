@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from 'react'
+﻿import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useSearchParams, useBlocker } from 'react-router-dom'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch, type FieldErrors } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
-import { Save, Loader2, User, Clock, DollarSign, Upload, Trash2, AlertTriangle, Check, X } from 'lucide-react'
+import { Save, Loader2, User, Clock, DollarSign, Upload, Trash2, Check, X, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -12,6 +12,11 @@ import { SenhaInput } from '@/components/SenhaInput'
 import { useSenhaValida } from '@/lib/senha'
 import { profissionalSchema, type ProfissionalForm } from '@/lib/schemas/profissional'
 import api, { exibirErro } from '@/services/api'
+import { clearProfissionalCache } from '@/hooks/useProfissional'
+
+function Erro({ errors, campo }: { errors: FieldErrors<ProfissionalForm>; campo: keyof ProfissionalForm }) {
+  return errors[campo] ? <p className="text-xs text-red-500 mt-1">{errors[campo]?.message}</p> : null
+}
 
 export default function ConfiguracoesPage() {
   const [searchParams] = useSearchParams()
@@ -20,7 +25,7 @@ export default function ConfiguracoesPage() {
   const {
     register,
     handleSubmit,
-    watch,
+    control,
     formState: { errors, isSubmitting },
     reset,
   } = useForm<ProfissionalForm>({
@@ -38,6 +43,8 @@ export default function ConfiguracoesPage() {
     },
   })
 
+  const valoresForm = useWatch({ control })
+
   const [carregando, setCarregando] = useState(true)
   const dadosInicial = useRef('')
 
@@ -46,13 +53,20 @@ export default function ConfiguracoesPage() {
   const [confirmarSenha, setConfirmarSenha] = useState('')
   const [salvandoSenha, setSalvandoSenha] = useState(false)
   const [senhaAtualStatus, setSenhaAtualStatus] = useState<'idle' | 'verificando' | 'valida' | 'invalida'>('idle')
+
+  const [novoEmail, setNovoEmail] = useState('')
+  const [senhaEmail, setSenhaEmail] = useState('')
+  const [salvandoEmail, setSalvandoEmail] = useState(false)
   const senhaValida = useSenhaValida(novaSenha)
-  const verificarTimeout = useRef<ReturnType<typeof setTimeout>>()
+  const verificarTimeout = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   useEffect(() => {
     if (verificarTimeout.current) clearTimeout(verificarTimeout.current)
-    if (!senhaAtual) { setSenhaAtualStatus('idle'); return }
-    setSenhaAtualStatus('verificando')
+    if (!senhaAtual) {
+      const id = setTimeout(() => setSenhaAtualStatus('idle'), 0)
+      return () => { clearTimeout(id); if (verificarTimeout.current) clearTimeout(verificarTimeout.current) }
+    }
+    const id = setTimeout(() => setSenhaAtualStatus('verificando'), 0)
     verificarTimeout.current = setTimeout(async () => {
       try {
         const res = await api.post('/profissional/me/verificar-senha', { senha: senhaAtual })
@@ -61,7 +75,7 @@ export default function ConfiguracoesPage() {
         setSenhaAtualStatus('invalida')
       }
     }, 600)
-    return () => { if (verificarTimeout.current) clearTimeout(verificarTimeout.current) }
+    return () => { clearTimeout(id); if (verificarTimeout.current) clearTimeout(verificarTimeout.current) }
   }, [senhaAtual])
 
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -70,7 +84,7 @@ export default function ConfiguracoesPage() {
   const [assinaturaUrl, setAssinaturaUrl] = useState<string | undefined>()
 
   function isDirty(): boolean {
-    return JSON.stringify(watch()) !== dadosInicial.current || !!senhaAtual || !!novaSenha || !!confirmarSenha
+    return JSON.stringify(valoresForm) !== dadosInicial.current || !!senhaAtual || !!novaSenha || !!confirmarSenha
   }
 
   const blocker = useBlocker(isDirty)
@@ -115,7 +129,8 @@ export default function ConfiguracoesPage() {
     try {
       await api.put('/profissional/me', data)
       toast.success('Dados salvos com sucesso!')
-      dadosInicial.current = JSON.stringify(watch())
+      dadosInicial.current = JSON.stringify(valoresForm)
+      clearProfissionalCache()
     } catch (err) {
       toast.error(exibirErro(err, 'Erro ao salvar. Tente novamente.'))
     }
@@ -168,9 +183,6 @@ export default function ConfiguracoesPage() {
     }
   }
 
-  const Erro = ({ campo }: { campo: keyof ProfissionalForm }) =>
-    errors[campo] ? <p className="text-xs text-red-500 mt-1">{errors[campo]?.message}</p> : null
-
   if (carregando) {
     return (
       <div className="max-w-2xl mx-auto space-y-6">
@@ -199,14 +211,14 @@ export default function ConfiguracoesPage() {
           }
         </p>
         {isSetup && (
-          <div className="flex items-center gap-2 p-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-sm">
-            <AlertTriangle className="w-5 h-5 shrink-0" />
-            <span>Complete seu cadastro com CREFITO, cidade e UF para emitir laudos e agendar atendimentos.</span>
+          <div className="p-4 rounded-lg border border-green-200 bg-green-50 text-green-800 text-sm space-y-2">
+            <p className="font-semibold">Bem-vindo ao Kinevia!</p>
+            <p className="text-green-700">Complete seu cadastro abaixo com CREFITO, cidade e UF para começar a emitir laudos e agendar atendimentos.</p>
           </div>
         )}
       </div>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={(e) => { void handleSubmit(onSubmit)(e) }} className="space-y-6">
         <div className="bg-card rounded-xl border border-border p-6">
           <div className="flex items-center gap-2 mb-5">
             <User className="w-4 h-4 text-primary" />
@@ -217,31 +229,30 @@ export default function ConfiguracoesPage() {
             <div className="space-y-1.5">
               <Label htmlFor="nome">Nome completo</Label>
               <Input id="nome" {...register('nome')} placeholder="Seu nome completo" />
-              <Erro campo="nome" />
+              <Erro errors={errors} campo="nome" />
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="email">E-mail</Label>
+              <Label htmlFor="email">E-mail atual</Label>
               <Input id="email" value={email} disabled className="bg-muted text-muted-foreground" />
-              <p className="text-xs text-muted-foreground">O e-mail não pode ser alterado.</p>
             </div>
 
             <div className="space-y-1.5">
               <Label htmlFor="crefito">CREFITO</Label>
               <Input id="crefito" {...register('crefito')} placeholder="CREFITO-2/123456-F" />
-              <Erro campo="crefito" />
+              <Erro errors={errors} campo="crefito" />
             </div>
 
             <div className="grid grid-cols-3 gap-3">
               <div className="col-span-2 space-y-1.5">
                 <Label htmlFor="cidade">Cidade</Label>
                 <Input id="cidade" {...register('cidade')} placeholder="Rio de Janeiro" />
-                <Erro campo="cidade" />
+                <Erro errors={errors} campo="cidade" />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="uf">UF</Label>
                 <Input id="uf" {...register('uf')} placeholder="RJ" maxLength={2} />
-                <Erro campo="uf" />
+                <Erro errors={errors} campo="uf" />
               </div>
             </div>
           </div>
@@ -317,12 +328,12 @@ export default function ConfiguracoesPage() {
             <div className="space-y-1.5">
               <Label htmlFor="horario_inicio">Início do expediente</Label>
               <Input id="horario_inicio" type="time" {...register('horario_inicio')} />
-              <Erro campo="horario_inicio" />
+              <Erro errors={errors} campo="horario_inicio" />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="horario_fim">Fim do expediente</Label>
               <Input id="horario_fim" type="time" {...register('horario_fim')} />
-              <Erro campo="horario_fim" />
+              <Erro errors={errors} campo="horario_fim" />
             </div>
           </div>
         </div>
@@ -337,18 +348,18 @@ export default function ConfiguracoesPage() {
             <div className="space-y-1.5">
               <Label htmlFor="preco_individual">Sessão individual (R$)</Label>
               <Input id="preco_individual" type="number" min={0} step={0.01} {...register('preco_sessao_individual', { valueAsNumber: true })} />
-              <Erro campo="preco_sessao_individual" />
+              <Erro errors={errors} campo="preco_sessao_individual" />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label htmlFor="preco_pacote5">Pacote de 5 sessões (R$)</Label>
                 <Input id="preco_pacote5" type="number" min={0} step={0.01} {...register('preco_pacote_5', { valueAsNumber: true })} />
-                <Erro campo="preco_pacote_5" />
+                <Erro errors={errors} campo="preco_pacote_5" />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="preco_pacote10">Pacote de 10 sessões (R$)</Label>
                 <Input id="preco_pacote10" type="number" min={0} step={0.01} {...register('preco_pacote_10', { valueAsNumber: true })} />
-                <Erro campo="preco_pacote_10" />
+                <Erro errors={errors} campo="preco_pacote_10" />
               </div>
             </div>
           </div>
@@ -409,6 +420,75 @@ export default function ConfiguracoesPage() {
           </Button>
         </div>
       </form>
+
+      <div className="bg-card rounded-xl border border-border p-6">
+        <h2 className="text-sm font-semibold text-foreground mb-5">Alterar e-mail</h2>
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="novoEmail">Novo e-mail</Label>
+            <Input id="novoEmail" type="email" value={novoEmail} onChange={(e) => setNovoEmail(e.target.value)} placeholder="novo@email.com" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="senhaEmail">Sua senha atual</Label>
+            <Input id="senhaEmail" type="password" value={senhaEmail} onChange={(e) => setSenhaEmail(e.target.value)} placeholder="Confirme sua senha atual" />
+          </div>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={salvandoEmail || !novoEmail || !senhaEmail}
+          className="gap-2 mt-5"
+          onClick={async () => {
+            setSalvandoEmail(true)
+            try {
+              await api.put('/profissional/me/email', { novoEmail, senha: senhaEmail })
+              toast.success('Email alterado com sucesso! Faça login novamente.')
+              setTimeout(() => { window.location.href = '/login' }, 2000)
+            } catch (err) {
+              toast.error(exibirErro(err, 'Erro ao alterar email.'))
+            } finally {
+              setSalvandoEmail(false)
+            }
+          }}
+        >
+          {salvandoEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+          {salvandoEmail ? 'Salvando...' : 'Alterar e-mail'}
+        </Button>
+      </div>
+
+      <div className="bg-card rounded-xl border border-border p-6">
+        <div className="flex items-center gap-2 mb-5">
+          <Download className="w-4 h-4 text-primary" />
+          <h2 className="text-sm font-semibold text-foreground">Exportar dados</h2>
+        </div>
+        <p className="text-xs text-muted-foreground mb-4">
+          Baixe todos os seus dados (pacientes, agendamentos, pacotes, laudos) em formato JSON.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="gap-2"
+          onClick={async () => {
+            try {
+              const res = await api.get('/profissional/me/exportar-dados')
+              const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' })
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = url
+              a.download = `kinevia-backup-${new Date().toISOString().split('T')[0]}.json`
+              a.click()
+              URL.revokeObjectURL(url)
+              toast.success('Dados exportados com sucesso!')
+            } catch (err) {
+              toast.error(exibirErro(err, 'Erro ao exportar dados.'))
+            }
+          }}
+        >
+          <Download className="w-4 h-4" />
+          Exportar dados
+        </Button>
+      </div>
 
       {blocker.state === 'blocked' && createPortal(
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/40">

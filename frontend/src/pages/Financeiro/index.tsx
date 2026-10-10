@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   DollarSign, CheckCircle2, Clock, ChevronLeft, ChevronRight,
-  TrendingUp, Users, ChevronRight as ChevronRightIcon
+  TrendingUp, Users, ChevronRight as ChevronRightIcon, Info
 } from 'lucide-react'
 import { toast } from 'sonner'
 import api, { exibirErro } from '@/services/api'
@@ -89,21 +89,27 @@ export default function FinanceiroPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6">
 
       {/* Cabeçalho + navegação de mês */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-xl font-semibold text-foreground">Financeiro</h1>
-        <div className="flex items-center gap-2">
-          <button onClick={() => avancarMes(-1)} className="p-1.5 rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <span className="text-sm font-medium text-foreground min-w-32 text-center">
-            {nomesMeses[mes - 1]} de {ano}
-          </span>
-          <button onClick={() => avancarMes(1)} className="p-1.5 rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
-            <ChevronRight className="w-4 h-4" />
-          </button>
+        <div className="flex flex-col items-end gap-1">
+          <div className="flex items-center gap-2">
+            <button onClick={() => avancarMes(-1)} aria-label="Mês anterior" title="Mês anterior" className="p-1.5 rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="text-sm font-medium text-foreground min-w-32 text-center">
+              {nomesMeses[mes - 1]} de {ano}
+            </span>
+            <button onClick={() => avancarMes(1)} aria-label="Próximo mês" title="Próximo mês" className="p-1.5 rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+          <p className="flex items-center gap-1.5 rounded-md bg-muted/60 px-2.5 py-1.5 text-xs text-foreground/70">
+            <Info className="w-3.5 h-3.5 shrink-0" />
+            Use as setas para navegar entre os meses
+          </p>
         </div>
       </div>
 
@@ -154,7 +160,7 @@ export default function FinanceiroPage() {
       {resumo && (
         <div className="bg-card rounded-xl border border-border p-5">
           <h2 className="text-sm font-semibold text-foreground mb-4">Por tipo de pacote</h2>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {[
               { label: 'Individual', dados: resumo.breakdown_por_tipo.individual },
               { label: 'Pacote com 5 sessões', dados: resumo.breakdown_por_tipo.pacote_5 },

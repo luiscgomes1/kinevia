@@ -1,0 +1,50 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-kinevia}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kinevia}
+      POSTGRES_DB: ${POSTGRES_DB:-kinevia}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kinevia}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3333:3333"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-kinevia}:${POSTGRES_PASSWORD:-kinevia}@postgres:5432/${POSTGRES_DB:-kinevia}
+      JWT_SECRET: ${JWT_SECRET:?Defina JWT_SECRET no .env}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?Defina JWT_REFRESH_SECRET no .env}
+      COOKIE_SECRET: ${COOKIE_SECRET:?Defina COOKIE_SECRET no .env}
+      FRONTEND_URL: http://localhost:80
+      PORT: 3333
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: >
+      sh -c "npx prisma migrate deploy && node dist/server.js"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: ""
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:

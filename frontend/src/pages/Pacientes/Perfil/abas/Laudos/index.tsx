@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Loader2, Plus, FileText, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -17,13 +18,14 @@ import ClinicoForm from './modal/ClinicoForm'
 import CompletoForm from './modal/CompletoForm'
 import ReembolsoForm from './modal/ReembolsoForm'
 import { useLaudos } from './useLaudos'
-import { TIPO_ROTULO } from './types'
+import { TIPO_ROTULO, type ConteudoCompleto, type ConteudoReembolso, type ConteudoBase, type Laudo } from './types'
 
 interface Props {
     pacienteId: string
 }
 
 export default function LaudosTab({ pacienteId }: Props) {
+    const [laudoExcluindo, setLaudoExcluindo] = useState<Laudo | null>(null)
     const {
         laudos, carregando, gerando,
         modalAberto, setModalAberto,
@@ -37,6 +39,7 @@ export default function LaudosTab({ pacienteId }: Props) {
         handleSalvarEdicao,
         handleBaixarPDF,
         handleBaixarDeclaracao,
+        handleExcluirLaudo,
     } = useLaudos(pacienteId)
 
     if (carregando) {
@@ -98,6 +101,7 @@ export default function LaudosTab({ pacienteId }: Props) {
                         onEditar={handleAbrirEdicao}
                         onBaixarPDF={handleBaixarPDF}
                         onBaixarDeclaracao={handleBaixarDeclaracao}
+                        onExcluir={setLaudoExcluindo}
                     />
                 ))}
             </div>
@@ -134,21 +138,21 @@ export default function LaudosTab({ pacienteId }: Props) {
                         <>
                             {laudoTipo === 'COMPLETO' ? (
                                 <CompletoForm
-                                    conteudo={conteudo as any}
+                                    conteudo={conteudo as ConteudoCompleto}
                                     onChange={(p) => setConteudo((prev) => ({ ...prev, ...p }))}
                                     tipoAssinatura={tipoAssinatura}
                                     onChangeAssinatura={setTipoAssinatura}
                                 />
                             ) : laudoTipo === 'REEMBOLSO' ? (
                                 <ReembolsoForm
-                                    conteudo={conteudo as any}
+                                    conteudo={conteudo as ConteudoReembolso}
                                     onChange={(p) => setConteudo((prev) => ({ ...prev, ...p }))}
                                     tipoAssinatura={tipoAssinatura}
                                     onChangeAssinatura={setTipoAssinatura}
                                 />
                             ) : (
                                 <ClinicoForm
-                                    conteudo={conteudo as any}
+                                    conteudo={conteudo as ConteudoBase}
                                     onChange={(p) => setConteudo((prev) => ({ ...prev, ...p }))}
                                     tipoAssinatura={tipoAssinatura}
                                     onChangeAssinatura={setTipoAssinatura}
@@ -200,6 +204,37 @@ export default function LaudosTab({ pacienteId }: Props) {
                             </div>
                         </>
                     )}
+                </DialogContent>
+            </Dialog>
+
+            {/* Confirmação de exclusão de laudo */}
+            <Dialog open={!!laudoExcluindo} onOpenChange={(aberto) => {
+                if (!aberto) setLaudoExcluindo(null)
+            }}>
+                <DialogContent className="max-w-sm">
+                    <DialogHeader>
+                        <DialogTitle>Excluir laudo?</DialogTitle>
+                    </DialogHeader>
+                    <p className="text-sm text-muted-foreground">
+                        Este laudo ainda não foi salvo como arquivo na clínica. Ele será removido
+                        definitivamente do sistema. Deseja continuar?
+                    </p>
+                    <div className="flex justify-end gap-2 pt-2">
+                        <Button variant="outline" onClick={() => setLaudoExcluindo(null)}>
+                            Cancelar
+                        </Button>
+                        <Button
+                            variant="destructive"
+                            onClick={() => {
+                                if (laudoExcluindo) {
+                                    handleExcluirLaudo(laudoExcluindo.id)
+                                    setLaudoExcluindo(null)
+                                }
+                            }}
+                        >
+                            Excluir
+                        </Button>
+                    </div>
                 </DialogContent>
             </Dialog>
         </div>

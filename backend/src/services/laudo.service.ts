@@ -1,6 +1,7 @@
 import PDFDocument from 'pdfkit'
 import { Response } from 'express'
 import * as stream from 'stream'
+import { desenharTabelaEVA } from './pdf-tools'
 
 interface DadosLaudo {
     cidade: string
@@ -17,6 +18,7 @@ interface DadosLaudo {
     eva_inicial: number | null
     eva_atual: number | null
     data_inicio: string
+    data_fim: string
     frequencia_semanal: string
     quadro_clinico: string
     achados_exame: string
@@ -77,15 +79,14 @@ function gerarDoc(dados: DadosLaudo) {
         doc.text(`CID: ${dados.cid}`)
     }
     doc.text(`Início do tratamento: ${dados.data_inicio}`)
+    if (dados.data_fim) {
+        doc.text(`Término do tratamento: ${dados.data_fim}`)
+    }
     doc.text(`Frequência semanal: ${dados.frequencia_semanal}`)
     if (dados.total_sessoes) {
         doc.text(`Total de sessões: ${dados.total_sessoes}`)
     }
-    if (dados.eva_inicial !== null || dados.eva_atual !== null) {
-        doc.text(`EVA (escala de dor 0-10):`)
-        if (dados.eva_inicial !== null) doc.text(`  Inicial: ${dados.eva_inicial}/10`)
-        if (dados.eva_atual !== null) doc.text(`  Atual: ${dados.eva_atual}/10`)
-    }
+    desenharTabelaEVA(doc, dados.eva_inicial, dados.eva_atual)
     doc.moveDown(1)
 
     secao(doc, 'QUADRO CLÍNICO', dados.quadro_clinico)

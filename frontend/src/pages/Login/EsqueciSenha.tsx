@@ -10,6 +10,11 @@ import { Label } from '@/components/ui/label'
 import { esqueciSenhaSchema, type EsqueciSenhaForm } from '@/lib/schemas/auth'
 import api, { exibirErro } from '@/services/api'
 import logoKinevia from '@/assets/logo-kinevia-2.png'
+import type { FieldErrors } from 'react-hook-form'
+
+function Erro({ errors }: { errors: FieldErrors<EsqueciSenhaForm> }) {
+  return errors.email ? <p className="text-xs text-red-500 mt-1">{errors.email?.message}</p> : null
+}
 
 export default function EsqueciSenhaPage() {
   const [enviado, setEnviado] = useState(false)
@@ -31,9 +36,6 @@ export default function EsqueciSenhaPage() {
       toast.error(exibirErro(err, 'Erro ao solicitar redefinição.'))
     }
   }
-
-  const Erro = () =>
-    errors.email ? <p className="text-xs text-red-500 mt-1">{errors.email?.message}</p> : null
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
@@ -70,7 +72,7 @@ export default function EsqueciSenhaPage() {
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input id="email" type="email" {...register('email')} placeholder="seu@email.com" className="pl-9" />
                 </div>
-                <Erro />
+                <Erro errors={errors} />
               </div>
 
               <Button type="submit" disabled={isSubmitting} className="w-full gap-2">

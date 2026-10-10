@@ -55,7 +55,7 @@ function AgoraMarker({ horaAtualFormatada, semEspinha }: { horaAtualFormatada: s
  *   gap ali, porque o marcador era um bloco separado sem segmento próprio
  */
 const TimelineDia = memo(function TimelineDia() {
-  const { grade, carregando, ehHoje, dataSelecionada, setTriggerRapido } = useAgenda()
+  const { grade, carregando, ehHoje, dataSelecionada, setTriggerRapido, profissionalFiltroId } = useAgenda()
   const [agora, setAgora] = useState(() => new Date())
   useEffect(() => {
     const intervalo = setInterval(() => setAgora(new Date()), 60_000)
@@ -85,6 +85,11 @@ const TimelineDia = memo(function TimelineDia() {
 
   return (
     <div className="bg-card rounded-xl border border-border p-4 sm:p-5">
+      {profissionalFiltroId && grade?.profissional_nome && (
+        <div className="mb-3 text-xs text-muted-foreground">
+          Agenda de: <span className="font-medium text-foreground">{grade.profissional_nome}</span>
+        </div>
+      )}
       <div>
         {/* Marcador "agora" antes do primeiro horário */}
         {antesDoPrimeiro && <AgoraMarker horaAtualFormatada={horaAtualFormatada} semEspinha />}

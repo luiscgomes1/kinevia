@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import type { ConteudoCompleto } from '../types'
 import ClinicoFormBase from './ClinicoForm'
+import CifPicker from './CifPicker'
 
 interface Props {
     conteudo: ConteudoCompleto
@@ -45,25 +46,10 @@ const CompletoForm = memo(function CompletoForm({ conteudo, onChange, tipoAssina
 
             <p className="text-sm font-semibold text-foreground">Classificação Internacional de Funcionalidade (CIF)</p>
 
-            <div className="grid grid-cols-1 gap-4">
-                {([
-                    { campo: 'cif_funcao' as const, label: 'Funções do corpo' },
-                    { campo: 'cif_estrutura' as const, label: 'Estruturas do corpo' },
-                    { campo: 'cif_atividade' as const, label: 'Atividades e participação' },
-                    { campo: 'cif_participacao' as const, label: 'Participação social' },
-                    { campo: 'cif_contextual' as const, label: 'Fatores contextuais' },
-                ]).map(({ campo, label }) => (
-                    <div key={campo} className="space-y-1.5">
-                        <Label>{label}</Label>
-                        <input
-                            value={conteudo[campo]}
-                            onChange={(e) => onChange({ [campo]: e.target.value })}
-                            placeholder="Ex: b280, b710, etc."
-                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                        />
-                    </div>
-                ))}
-            </div>
+            <CifPicker
+                cifs={conteudo.cifs}
+                onChange={(cifs) => onChange({ cifs })}
+            />
 
             <hr className="border-border" />
 

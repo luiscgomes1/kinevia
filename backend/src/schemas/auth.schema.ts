@@ -18,11 +18,6 @@ export const loginSchema = z.object({
 
 export const refreshSchema = z.object({})
 
-export const registerSchema = z.object({
-    nome: z.string().trim().min(2, { message: 'Nome deve ter pelo menos 2 caracteres.' }).max(255),
-    email: emailSchema,
-    senha: senhaSchema,
-    crefito: z.string().trim().min(3, { message: 'CREFITO inválido.' }).max(50),
-    cidade: z.string().trim().min(2, { message: 'Cidade inválida.' }).max(255),
-    uf: z.string().trim().length(2, { message: 'UF deve ter 2 caracteres.' }),
+export const trocarSenhaSchema = z.object({
+    novaSenha: senhaSchema,
 })

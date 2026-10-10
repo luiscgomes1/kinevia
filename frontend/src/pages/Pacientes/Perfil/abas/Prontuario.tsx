@@ -51,7 +51,7 @@ const ProntuarioTab = memo(function ProntuarioTab({ pacienteId, onDirtyChange }:
   const [carregando, setCarregando] = useState(true)
   const [salvando, setSalvando] = useState(false)
   const [sucesso, setSucesso] = useState(false)
-  const sucessoTimer = useRef<ReturnType<typeof setTimeout>>()
+  const sucessoTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   const [novaEvolucao, setNovaEvolucao] = useState('')
   const [novaEva, setNovaEva] = useState<number | null>(null)
@@ -177,11 +177,17 @@ const ProntuarioTab = memo(function ProntuarioTab({ pacienteId, onDirtyChange }:
     e.preventDefault()
     setSalvando(true)
     try {
-      await api.put(`/pacientes/${pacienteId}/prontuario`, form)
+      const response = await api.put(`/pacientes/${pacienteId}/prontuario`, form)
+      const salvo = response.data as Prontuario
+      setProntuario((prev) => ({
+        ...(prev ?? { evolucoes: [] as Evolucao[] }),
+        ...salvo,
+        preenchido: true,
+      }))
       setSucesso(true)
       clearTimeout(sucessoTimer.current)
       sucessoTimer.current = setTimeout(() => setSucesso(false), 3000)
-      carregar()
+      initialSnapshotRef.current = JSON.stringify(form)
     } catch (err) {
       toast.error(exibirErro(err, 'Erro ao salvar prontuário.'))
     } finally {
@@ -193,14 +199,18 @@ const ProntuarioTab = memo(function ProntuarioTab({ pacienteId, onDirtyChange }:
     if (!novaEvolucao.trim()) return
     setSalvandoEvolucao(true)
     try {
-      await api.post(`/pacientes/${pacienteId}/evolucoes`, {
+      const response = await api.post(`/pacientes/${pacienteId}/evolucoes`, {
         texto: novaEvolucao,
         ...(novaEva !== null && { dor_eva: novaEva }),
       })
       setNovaEvolucao('')
       setNovaEva(null)
       setMostrarFormEvolucao(false)
-      carregar()
+      setProntuario((prev) =>
+        prev
+          ? { ...prev, preenchido: true, evolucoes: [...(prev.evolucoes ?? []), response.data as Evolucao] }
+          : prev,
+      )
     } catch (err) {
       toast.error(exibirErro(err, 'Erro ao salvar evolução.'))
     } finally {
@@ -215,6 +225,20 @@ const ProntuarioTab = memo(function ProntuarioTab({ pacienteId, onDirtyChange }:
       setNovaEvolucao('')
       setNovaEva(null)
       setMostrarFormEvolucao(false)
+    }
+  }
+
+  async function handleCorrigirEvolucao(evolucaoId: string, correcaoTexto: string) {
+    try {
+      const response = await api.patch(`/evolucoes/${evolucaoId}/correcao`, { correcao_texto: correcaoTexto })
+      setProntuario((prev) =>
+        prev
+          ? { ...prev, evolucoes: prev.evolucoes.map((ev) => (ev.id === evolucaoId ? (response.data as Evolucao) : ev)) }
+          : prev,
+      )
+    } catch (err) {
+      toast.error(exibirErro(err, 'Erro ao salvar correção.'))
+      throw err
     }
   }
 
@@ -256,6 +280,7 @@ const ProntuarioTab = memo(function ProntuarioTab({ pacienteId, onDirtyChange }:
         onToggleForm={() => setMostrarFormEvolucao((prev) => !prev)}
         onSalvarEvolucao={handleSalvarEvolucao}
         onCancelarEvolucao={handleCancelarEvolucao}
+        onCorrigirEvolucao={handleCorrigirEvolucao}
       />
       {confirmCancelEvo && createPortal(
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/40">

@@ -47,6 +47,7 @@ export const VisaoMensal = memo(function VisaoMensal() {
       <div className="flex items-center justify-between">
         <button
           onClick={() => navegarMes(-1)}
+          aria-label="Mês anterior"
           className="p-1.5 rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
         >
           <ChevronLeft className="w-5 h-5" />
@@ -56,6 +57,7 @@ export const VisaoMensal = memo(function VisaoMensal() {
         </h2>
         <button
           onClick={() => navegarMes(1)}
+          aria-label="Próximo mês"
           className="p-1.5 rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
         >
           <ChevronRight className="w-5 h-5" />

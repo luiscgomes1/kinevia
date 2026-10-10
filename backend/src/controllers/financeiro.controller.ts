@@ -1,5 +1,6 @@
 import { Request, Response } from 'express'
 import prisma from '../lib/prisma'
+import { wherePacote, wherePaciente } from '../lib/escopo'
 
 // GET /financeiro
 export async function resumoFinanceiro(req: Request, res: Response) {
@@ -20,7 +21,7 @@ export async function resumoFinanceiro(req: Request, res: Response) {
   // Todos os pacotes do profissional no período
   const pacotesNoPeriodo = await prisma.pacote.findMany({
     where: {
-      profissional_id: req.profissionalId,
+      ...wherePacote(req),
       criado_em: {
         gte: inicioPeriodo, // gte = greater than or equal (>=)
         lte: fimPeriodo,    // lte = less than or equal (<=)
@@ -45,7 +46,7 @@ export async function resumoFinanceiro(req: Request, res: Response) {
   // Total acumulado (todos os pacotes pagos, independente do período)
   const todosPacotesPagos = await prisma.pacote.findMany({
     where: {
-      profissional_id: req.profissionalId,
+      ...wherePacote(req),
       status_pagamento: 'PAGO',
     },
     select: { valor_cobrado: true }
@@ -100,7 +101,7 @@ export async function financeiroPorPaciente(req: Request, res: Response) {
 
   const pacotes = await prisma.pacote.findMany({
     where: {
-      profissional_id: req.profissionalId,
+      ...wherePacote(req),
       criado_em: {
         gte: inicioPeriodo,
         lte: fimPeriodo,
@@ -178,7 +179,7 @@ export async function financeiroPacienteId(req: Request, res: Response) {
 
   const pacotes = await prisma.pacote.findMany({
     where: {
-      profissional_id: req.profissionalId,
+      ...wherePacote(req),
       paciente_id: id,
       criado_em: {
         gte: inicioPeriodo,
@@ -192,7 +193,7 @@ export async function financeiroPacienteId(req: Request, res: Response) {
   })
 
   const paciente = await prisma.paciente.findFirst({
-    where: { id, profissional_id: req.profissionalId },
+    where: { id, ...wherePaciente(req), deleted_at: null },
     select: { id: true, nome: true }
   })
 

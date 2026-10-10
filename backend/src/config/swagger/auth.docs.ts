@@ -1,21 +1,23 @@
 import type { OpenAPIV3 } from 'openapi-types'
 
 export const authPaths: OpenAPIV3.PathsObject = {
-    '/auth/register': {
+    '/auth/trocar-senha': {
         post: {
             tags: ['Auth'],
-            summary: 'Criar conta de profissional',
+            summary: 'Trocar senha temporária',
+            description: 'Usuários com senha temporária devem trocá-la antes de acessar o sistema.',
+            security: [{ bearerAuth: [] }],
             requestBody: {
                 required: true,
-                content: { 'application/json': { schema: { $ref: '#/components/schemas/RegisterRequest' } } },
+                content: { 'application/json': { schema: { $ref: '#/components/schemas/TrocarSenhaTemporariaRequest' } } },
             },
             responses: {
-                '201': {
-                    description: 'Conta criada',
-                    content: { 'application/json': { schema: { $ref: '#/components/schemas/RegisterResponse' } } },
+                '200': {
+                    description: 'Senha alterada',
+                    content: { 'application/json': { schema: { $ref: '#/components/schemas/MensagemResponse' } } },
                 },
-                '409': {
-                    description: 'Email já cadastrado',
+                '403': {
+                    description: 'Senha temporária não está ativa',
                     content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
                 },
             },

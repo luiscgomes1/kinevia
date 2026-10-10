@@ -6,6 +6,7 @@ export default defineConfig({
     environment: 'node',
     globalSetup: ['./tests/globalSetup.ts'],
     setupFiles: ['./tests/setup.ts'],
+    exclude: ['node_modules/**', 'dist/**'],
     env: {
       NODE_ENV: 'test',
       JWT_SECRET: process.env.JWT_SECRET ?? 'test-secret-key',

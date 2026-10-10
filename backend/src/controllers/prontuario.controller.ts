@@ -1,11 +1,13 @@
 import { Request, Response } from "express";
 import prisma from "../lib/prisma";
+import { registrarAudit } from "../lib/audit";
+import { wherePaciente } from "../lib/escopo";
 
 export async function buscarProntuario(req: Request, res: Response) {
   const { id } = req.params;
 
   const paciente = await prisma.paciente.findFirst({
-    where: { id, profissional_id: req.profissionalId },
+    where: { id, ...wherePaciente(req), deleted_at: null },
   });
 
   if (!paciente) {
@@ -20,6 +22,8 @@ export async function buscarProntuario(req: Request, res: Response) {
       },
     },
   });
+
+  registrarAudit(req.profissionalId!, 'PRONTUARIO_VISUALIZADO', id)
 
   if (!prontuario) {
     return res.json({ paciente_id: id, preenchido: false, evolucoes: [] });
@@ -56,7 +60,7 @@ export async function salvarProntuario(req: Request, res: Response) {
   } = req.body;
 
   const paciente = await prisma.paciente.findFirst({
-    where: { id, profissional_id: req.profissionalId },
+    where: { id, ...wherePaciente(req), deleted_at: null },
   });
 
   if (!paciente) {
@@ -114,6 +118,8 @@ export async function salvarProntuario(req: Request, res: Response) {
     },
   });
 
+    registrarAudit(req.profissionalId!, 'PRONTUARIO_ATUALIZADO', id);
+
     return res.json(prontuario);
 }
 
@@ -122,7 +128,7 @@ export async function adicionarEvolucao(req: Request, res: Response) {
     const { texto, dor_eva } = req.body;
 
     const paciente = await prisma.paciente.findFirst({
-        where: { id, profissional_id: req.profissionalId },
+        where: { id, ...wherePaciente(req), deleted_at: null },
     });
 
     if (!paciente) {
@@ -145,6 +151,8 @@ export async function adicionarEvolucao(req: Request, res: Response) {
         }
     })
 
+    registrarAudit(req.profissionalId!, 'EVOLUCAO_CRIADA', id, { evolucao_id: evolucao.id })
+
     return res.status(201).json(evolucao);
 }
 
@@ -158,7 +166,7 @@ export async function adicionarCorrecao(req: Request, res: Response) {
             correcao_texto: null,
             prontuario: {
                 paciente: {
-                    profissional_id: req.profissionalId
+                    ...wherePaciente(req)
                 }
             }
         },
@@ -174,7 +182,7 @@ export async function adicionarCorrecao(req: Request, res: Response) {
                 id,
                 prontuario: {
                     paciente: {
-                        profissional_id: req.profissionalId
+                        ...wherePaciente(req)
                     }
                 }
             },
@@ -186,7 +194,14 @@ export async function adicionarCorrecao(req: Request, res: Response) {
 
     const evolucaoAtualizada = await prisma.evolucao.findFirst({
         where: { id },
+        include: { prontuario: { select: { paciente_id: true } } },
     });
 
-    return res.json(evolucaoAtualizada);
+    if (evolucaoAtualizada) {
+        registrarAudit(req.profissionalId!, 'EVOLUCAO_CORRIGIDA', evolucaoAtualizada.prontuario.paciente_id, { evolucao_id: id });
+    }
+
+    const { prontuario: _prontuario, ...evolucao } = evolucaoAtualizada!;
+
+    return res.json(evolucao);
 }

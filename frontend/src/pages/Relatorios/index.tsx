@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid } from 'recharts'
-import { Users, CalendarCheck, CalendarX, AlertTriangle, CalendarRange, DollarSign, Activity } from 'lucide-react'
+import { Users, CalendarCheck, CalendarX, AlertTriangle, CalendarRange, DollarSign, Activity, ArrowUp, ArrowDown, Info } from 'lucide-react'
 import { toast } from 'sonner'
 import api, { exibirErro } from '@/services/api'
 import { formatarDataISO } from '@/lib/data'
+import { useProfissional } from '@/hooks/useProfissional'
+import { useProfissionais } from '@/hooks/useProfissionais'
 
 interface ResumoPeriodo {
   periodo: { inicio: string; fim: string }
@@ -14,8 +16,16 @@ interface ResumoPeriodo {
   taxaFaltas: number
   pacientesAtivos: number
   sessoesPorMes: { mes: string; quantidade: number }[]
-  faturamentoEstimado: number
+  faturamentoEstimado?: number
   evolucaoEva: { data: string; eva: number }[]
+}
+
+interface Comparativo {
+  periodo: { inicio: string; fim: string }
+  periodoAnterior: { inicio: string; fim: string }
+  atual: { total: number; compareceu: number; faltou: number; desmarcou: number }
+  anterior: { total: number; compareceu: number; faltou: number; desmarcou: number }
+  variacao: { total: number; compareceu: number; faltou: number; desmarcou: number }
 }
 
 function formatarValor(v: number): string {
@@ -28,7 +38,19 @@ function formatarMes(m: string): string {
   return `${meses[parseInt(mes) - 1]}/${ano}`
 }
 
+function VariacaoBadge({ valor }: { valor: number }) {
+  if (valor === 0) return null
+  const positivo = valor > 0
+  return (
+    <span className={`inline-flex items-center gap-0.5 text-xs font-medium ml-1.5 ${positivo ? 'text-red-600' : 'text-green-600'}`}>
+      {positivo ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
+      {Math.abs(valor)}%
+    </span>
+  )
+}
+
 export default function RelatoriosPage() {
+  const { profissional } = useProfissional()
   const hoje = new Date()
   const [inicio, setInicio] = useState(() => {
     const d = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
@@ -36,7 +58,13 @@ export default function RelatoriosPage() {
   })
   const [fim, setFim] = useState(() => formatarDataISO(hoje))
   const [dados, setDados] = useState<ResumoPeriodo | null>(null)
+  const [comparativo, setComparativo] = useState<Comparativo | null>(null)
   const [carregando, setCarregando] = useState(false)
+const [profissionalFiltro, setProfissionalFiltro] = useState('')
+
+  const podeFiltrarProfissional = profissional?.role === 'ADMIN' || profissional?.role === 'SUPER_ADMIN'
+
+  const { profissionais } = useProfissionais({ habilitado: podeFiltrarProfissional })
 
   useEffect(() => {
     let cancelado = false
@@ -45,9 +73,15 @@ export default function RelatoriosPage() {
       if (cancelado) return
       setCarregando(true)
       try {
-        const response = await api.get(`/relatorios/resumo?inicio=${inicio}&fim=${fim}`)
+        const params = new URLSearchParams({ inicio, fim })
+        if (profissionalFiltro) params.set('profissional_id', profissionalFiltro)
+        const [resumoRes, compRes] = await Promise.all([
+          api.get(`/relatorios/resumo?${params}`),
+          api.get(`/relatorios/comparativo?${params}`),
+        ])
         if (cancelado) return
-        setDados(response.data)
+        setDados(resumoRes.data)
+        setComparativo(compRes.data)
       } catch (err) {
         if (!cancelado) toast.error(exibirErro(err, 'Erro ao carregar relatório.'))
       } finally {
@@ -55,11 +89,11 @@ export default function RelatoriosPage() {
       }
     })()
     return () => { cancelado = true }
-  }, [inicio, fim])
+  }, [inicio, fim, profissionalFiltro])
 
   if (carregando) {
     return (
-      <div className="space-y-6 max-w-4xl">
+      <div className="space-y-6">
         <div className="h-8 w-48 bg-muted animate-pulse rounded-lg" />
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[...Array(4)].map((_, i) => (
@@ -71,24 +105,54 @@ export default function RelatoriosPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6">
 
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-xl font-semibold text-foreground">Relatórios</h1>
-        <div className="flex items-center gap-2">
-          <input
-            type="date"
-            value={inicio}
-            onChange={(e) => setInicio(e.target.value)}
-            className="flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
-          />
-          <span className="text-xs text-muted-foreground">até</span>
-          <input
-            type="date"
-            value={fim}
-            onChange={(e) => setFim(e.target.value)}
-            className="flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
-          />
+        <div className="flex flex-col items-end gap-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            {podeFiltrarProfissional && (
+              <div className="flex flex-col gap-1">
+                <label htmlFor="filtro-profissional" className="text-xs font-semibold text-foreground/70">Funcionário</label>
+                <select
+                  id="filtro-profissional"
+                  value={profissionalFiltro}
+                  onChange={(e) => setProfissionalFiltro(e.target.value)}
+                  className="flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
+                >
+                  <option value="">Todos os profissionais</option>
+                  {profissionais.map((p) => (
+                    <option key={p.id} value={p.id}>{p.nome}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div className="flex flex-col gap-1">
+              <label htmlFor="periodo-inicio" className="text-xs font-semibold text-foreground/70">Período</label>
+              <div className="flex items-center gap-2">
+                <input
+                  id="periodo-inicio"
+                  type="date"
+                  value={inicio}
+                  onChange={(e) => setInicio(e.target.value)}
+                  className="flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
+                />
+                <span className="text-xs text-muted-foreground">até</span>
+                <input
+                  id="periodo-fim"
+                  type="date"
+                  value={fim}
+                  onChange={(e) => setFim(e.target.value)}
+                  className="flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
+                />
+              </div>
+            </div>
+          </div>
+          <p className="flex items-center gap-1.5 rounded-md bg-muted/60 px-2.5 py-1.5 text-xs text-foreground/70">
+            <Info className="w-3.5 h-3.5 shrink-0" />
+            {podeFiltrarProfissional && 'Selecione um funcionário para ver os relatórios dele. '}
+            Escolha o período (data inicial e final) para gerar os dados.
+          </p>
         </div>
       </div>
 
@@ -135,14 +199,53 @@ export default function RelatoriosPage() {
               <p className="text-xl font-semibold text-foreground">{dados.desmarcou}</p>
             </div>
 
-            <div className="bg-card rounded-xl border border-border p-4">
-              <div className="flex items-center gap-1.5 text-muted-foreground mb-2">
-                <DollarSign className="w-3.5 h-3.5" />
-                <p className="text-xs">Faturamento estimado</p>
+            {dados.faturamentoEstimado !== undefined && (
+              <div className="bg-card rounded-xl border border-border p-4">
+                <div className="flex items-center gap-1.5 text-muted-foreground mb-2">
+                  <DollarSign className="w-3.5 h-3.5" />
+                  <p className="text-xs">Faturamento estimado</p>
+                </div>
+                <p className="text-xl font-semibold text-foreground">R$ {formatarValor(dados.faturamentoEstimado)}</p>
               </div>
-              <p className="text-xl font-semibold text-foreground">R$ {formatarValor(dados.faturamentoEstimado)}</p>
-            </div>
+            )}
           </div>
+
+          {comparativo && (
+            <div className="bg-card rounded-xl border border-border p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-semibold text-foreground">Comparativo com período anterior</h2>
+                <span className="text-xs text-muted-foreground">
+                  {comparativo.periodoAnterior.inicio} ~ {comparativo.periodoAnterior.fim}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <p className="text-xs text-muted-foreground">Total</p>
+                  <p className="text-lg font-semibold">{comparativo.atual.total}
+                    <VariacaoBadge valor={comparativo.variacao.total} />
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-green-600">Compareceram</p>
+                  <p className="text-lg font-semibold text-green-700">{comparativo.atual.compareceu}
+                    <VariacaoBadge valor={comparativo.variacao.compareceu} />
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-red-600">Faltaram</p>
+                  <p className="text-lg font-semibold text-red-700">{comparativo.atual.faltou}
+                    <VariacaoBadge valor={comparativo.variacao.faltou} />
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Desmarcaram</p>
+                  <p className="text-lg font-semibold">{comparativo.atual.desmarcou}
+                    <VariacaoBadge valor={comparativo.variacao.desmarcou} />
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {dados.sessoesPorMes.length > 0 && (

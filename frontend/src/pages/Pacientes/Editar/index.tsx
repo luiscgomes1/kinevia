@@ -1,18 +1,21 @@
-import { useState, useEffect, useRef } from 'react'
+﻿import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useParams, useBlocker } from 'react-router-dom'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch, type FieldErrors } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
 import { ArrowLeft, Save, Loader2, Pencil, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { formatarTelefone } from '@/lib/masks'
 import { atualizarPacienteSchema, enderecoSchema, type AtualizarPacienteForm } from '@/lib/schemas/paciente'
 import api, { exibirErro } from '@/services/api'
+
+function Erro({ errors, campo }: { errors: FieldErrors<AtualizarPacienteForm>; campo: keyof AtualizarPacienteForm }) {
+  return errors[campo] ? <p className="text-xs text-red-500 mt-1">{errors[campo]?.message}</p> : null
+}
 
 export default function EditarPacientePage() {
   const { id } = useParams<{ id: string }>()
@@ -31,7 +34,7 @@ export default function EditarPacientePage() {
   const {
     register,
     handleSubmit,
-    watch,
+    control,
     formState: { errors },
     setValue,
     reset,
@@ -47,14 +50,12 @@ export default function EditarPacientePage() {
     },
   })
 
-  const valoresIniciais = useRef('')
+  const valoresForm = useWatch({ control })
 
-  useEffect(() => {
-    valoresIniciais.current = JSON.stringify({ ...watch(), addrRua, addrNumero, addrBairro, addrCidade, editandoEndereco })
-  }, [])
+  const valoresIniciais = useRef(JSON.stringify({ ...valoresForm, addrRua, addrNumero, addrBairro, addrCidade, editandoEndereco }))
 
   function serializarForm(): string {
-    return JSON.stringify({ ...watch(), addrRua, addrNumero, addrBairro, addrCidade, editandoEndereco })
+    return JSON.stringify({ ...valoresForm, addrRua, addrNumero, addrBairro, addrCidade, editandoEndereco })
   }
 
   const blocker = useBlocker(() => serializarForm() !== valoresIniciais.current)
@@ -107,7 +108,7 @@ export default function EditarPacientePage() {
     if (editandoEndereco) {
       const result = enderecoSchema.safeParse({ rua: addrRua, numero: addrNumero, bairro: addrBairro, cidade: addrCidade })
       if (!result.success) {
-        setErroEndereco(result.error.errors[0].message)
+        setErroEndereco(result.error.issues[0].message)
         return
       }
     }
@@ -138,9 +139,6 @@ export default function EditarPacientePage() {
       setSalvando(false)
     }
   }
-
-  const Erro = ({ campo }: { campo: keyof AtualizarPacienteForm }) =>
-    errors[campo] ? <p className="text-xs text-red-500 mt-1">{errors[campo]?.message}</p> : null
 
   if (carregando) {
     return (
@@ -181,7 +179,7 @@ export default function EditarPacientePage() {
           <div className="space-y-1.5">
             <Label htmlFor="nome">Nome completo *</Label>
             <Input id="nome" {...register('nome')} />
-            <Erro campo="nome" />
+            <Erro errors={errors} campo="nome" />
           </div>
 
           <div className="space-y-1.5">
@@ -241,7 +239,7 @@ export default function EditarPacientePage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label htmlFor="estado_civil">Estado civil *</Label>
-              <Select
+              <select
                 id="estado_civil"
                 {...register('estado_civil')}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 text-foreground"
@@ -252,13 +250,13 @@ export default function EditarPacientePage() {
                 <option value="Divorciado(a)">Divorciado(a)</option>
                 <option value="Viúvo(a)">Viúvo(a)</option>
                 <option value="União estável">União estável</option>
-              </Select>
-              <Erro campo="estado_civil" />
+              </select>
+              <Erro errors={errors} campo="estado_civil" />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="nacionalidade">Nacionalidade *</Label>
               <Input id="nacionalidade" {...register('nacionalidade')} />
-              <Erro campo="nacionalidade" />
+              <Erro errors={errors} campo="nacionalidade" />
             </div>
           </div>
         </div>
@@ -276,12 +274,12 @@ export default function EditarPacientePage() {
                 maxLength={15}
                 onChange={(e) => setValue('telefone', formatarTelefone(e.target.value), { shouldValidate: true })}
               />
-              <Erro campo="telefone" />
+              <Erro errors={errors} campo="telefone" />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="email">E-mail</Label>
               <Input id="email" type="email" {...register('email')} />
-              <Erro campo="email" />
+              <Erro errors={errors} campo="email" />
             </div>
           </div>
 

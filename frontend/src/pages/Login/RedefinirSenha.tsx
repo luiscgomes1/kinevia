@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate, Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Lock, Loader2, CheckCircle2 } from 'lucide-react'
@@ -13,8 +13,14 @@ import logoKinevia from '@/assets/logo-kinevia-2.png'
 export default function RedefinirSenhaPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const email = searchParams.get('email') || ''
-  const token = searchParams.get('token') || ''
+  const [email] = useState(() => searchParams.get('email') || '')
+  const [token] = useState(() => searchParams.get('token') || '')
+
+  useEffect(() => {
+    if (email || token) {
+      window.history.replaceState(null, '', '/redefinir-senha')
+    }
+  }, [email, token])
 
   const [novaSenha, setNovaSenha] = useState('')
   const [confirmarSenha, setConfirmarSenha] = useState('')
@@ -40,7 +46,6 @@ export default function RedefinirSenhaPage() {
 
     try {
       await api.post('/auth/redefinir-senha', { email, token, novaSenha })
-      window.history.replaceState(null, '', '/redefinir-senha')
       setSucesso(true)
     } catch (err) {
       toast.error(exibirErro(err, 'Erro ao redefinir senha.'))

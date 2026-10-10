@@ -38,57 +38,52 @@ describe('POST /v1/auth/login', () => {
   })
 })
 
-describe('POST /v1/auth/register', () => {
-  const emailUnico = `registro${Date.now()}@test.com`
-
-  afterAll(async () => {
-    await prisma.profissional.deleteMany({ where: { email: emailUnico } })
-  })
-
-  it('registra novo profissional', async () => {
-    const res = await request(app)
-      .post('/v1/auth/register')
-      .send({
-        nome: 'Novo Profissional',
-        email: emailUnico,
-        senha: 'Teste@1234',
-        crefito: 'CREFITO-2/99999-F',
-        cidade: 'São Paulo',
-        uf: 'SP',
-      })
-    expect(res.status).toBe(201)
-    expect(res.body).toHaveProperty('accessToken')
-    expect(res.body).toHaveProperty('profissional')
-    expect(res.body.profissional.nome).toBe('Novo Profissional')
-  })
-
-  it('rejeita email duplicado', async () => {
-    const res = await request(app)
-      .post('/v1/auth/register')
-      .send({
-        nome: 'Outro',
-        email: emailUnico,
-        senha: 'Teste@1234',
-        crefito: 'CREFITO-2/99998-F',
-        cidade: 'São Paulo',
-        uf: 'SP',
-      })
-    expect(res.status).toBe(409)
-    expect(res.body).toHaveProperty('erro')
-  })
-
+describe('POST /v1/auth/trocar-senha', () => {
   it('rejeita senha fraca', async () => {
+    const p = await criarProfissional({ token_version: 0 })
+    await prisma.profissional.update({ where: { id: p.id }, data: { senha_temporaria: true } })
+    const t = gerarToken(p.id, 0)
+
     const res = await request(app)
-      .post('/v1/auth/register')
-      .send({
-        nome: 'Teste',
-        email: `fraca${Date.now()}@test.com`,
-        senha: '123',
-        crefito: 'CREFITO-2/99997-F',
-        cidade: 'São Paulo',
-        uf: 'SP',
-      })
+      .post('/v1/auth/trocar-senha')
+      .set('Authorization', `Bearer ${t}`)
+      .send({ novaSenha: '123' })
     expect(res.status).toBe(400)
+
+    await prisma.profissional.delete({ where: { id: p.id } })
+  })
+
+  it('troca senha temporária com sucesso', async () => {
+    const p = await criarProfissional({ token_version: 0 })
+    await prisma.profissional.update({ where: { id: p.id }, data: { senha_temporaria: true } })
+    const t = gerarToken(p.id, 0)
+
+    const res = await request(app)
+      .post('/v1/auth/trocar-senha')
+      .set('Authorization', `Bearer ${t}`)
+      .send({ novaSenha: 'Nova@1234' })
+    expect(res.status).toBe(200)
+    expect(res.body).toHaveProperty('mensagem', 'Senha alterada com sucesso.')
+    expect(res.body).toHaveProperty('accessToken')
+
+    const updated = await prisma.profissional.findUnique({ where: { id: p.id } })
+    expect(updated?.senha_temporaria).toBe(false)
+
+    await prisma.profissional.delete({ where: { id: p.id } })
+  })
+
+  it('bloqueia acesso a outras rotas com senha temporária', async () => {
+    const p = await criarProfissional({ token_version: 0 })
+    await prisma.profissional.update({ where: { id: p.id }, data: { senha_temporaria: true } })
+    const t = gerarToken(p.id, 0)
+
+    const res = await request(app)
+      .get('/v1/profissional/me')
+      .set('Authorization', `Bearer ${t}`)
+    expect(res.status).toBe(403)
+    expect(res.body).toHaveProperty('precisaTrocarSenha', true)
+
+    await prisma.profissional.delete({ where: { id: p.id } })
   })
 })
 

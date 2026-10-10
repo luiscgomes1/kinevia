@@ -11,6 +11,10 @@ if (process.platform === 'win32') {
 
 const logger = pino({
   level: process.env.LOG_LEVEL || 'info',
+  redact: {
+    paths: ['email', 'cpf', 'cpf_paciente', 'telefone', 'senha', 'senha_hash', 'senha_temporaria', 'token', 'accessToken', 'refreshToken'],
+    censor: '[REDACTED]',
+  },
   transport:
     process.env.NODE_ENV !== 'production'
       ? { target: 'pino-pretty', options: { colorize: true } }

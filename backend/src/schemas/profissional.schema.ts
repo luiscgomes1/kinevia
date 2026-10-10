@@ -33,3 +33,8 @@ export const trocarSenhaSchema = z.object({
 export const verificarSenhaSchema = z.object({
     senha: z.string().min(1),
 })
+
+export const alterarEmailSchema = z.object({
+    senha: z.string().min(1, { message: 'Senha é obrigatória.' }),
+    novoEmail: z.string().email({ message: 'Email inválido.' }).max(255).trim(),
+})

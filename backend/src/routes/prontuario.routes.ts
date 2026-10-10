@@ -1,5 +1,5 @@
 import {  Router } from 'express';
-import { authenticate } from '../middlewares/auth.middleware';
+import { authenticate, authorize } from '../middlewares/auth.middleware';
 import { validar } from '../middlewares/validate.middleware';
 import {
     salvarProntuarioSchema,
@@ -13,8 +13,8 @@ import {
 
 const router = Router({  mergeParams: true });
 
-router.get('/prontuario', authenticate, buscarProntuario);
-router.put('/prontuario', authenticate, validar(salvarProntuarioSchema), salvarProntuario);
-router.post('/evolucoes', authenticate, validar(adicionarEvolucaoSchema), adicionarEvolucao);
+router.get('/prontuario', authenticate, authorize('ADMIN', 'PROFISSIONAL', 'SUPER_ADMIN'), buscarProntuario);
+router.put('/prontuario', authenticate, authorize('ADMIN', 'PROFISSIONAL', 'SUPER_ADMIN'), validar(salvarProntuarioSchema), salvarProntuario);
+router.post('/evolucoes', authenticate, authorize('ADMIN', 'PROFISSIONAL', 'SUPER_ADMIN'), validar(adicionarEvolucaoSchema), adicionarEvolucao);
 
 export default router;

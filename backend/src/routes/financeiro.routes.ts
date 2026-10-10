@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import { authenticate } from '../middlewares/auth.middleware'
+import { authenticate, authorize } from '../middlewares/auth.middleware'
 import { validar } from '../middlewares/validate.middleware'
 import {
     resumoFinanceiro,
@@ -15,8 +15,8 @@ const mesAnoQuery = z.object({
   ano: z.string().regex(/^\d{4}$/).optional(),
 })
 
-router.get('/', authenticate, validar(mesAnoQuery, 'query'), resumoFinanceiro)
-router.get('/pacientes', authenticate, validar(mesAnoQuery, 'query'), financeiroPorPaciente)
-router.get('/pacientes/:id', authenticate, validar(mesAnoQuery, 'query'), financeiroPacienteId)
+router.get('/', authenticate, authorize('ADMIN', 'SUPER_ADMIN'), validar(mesAnoQuery, 'query'), resumoFinanceiro)
+router.get('/pacientes', authenticate, authorize('ADMIN', 'SUPER_ADMIN'), validar(mesAnoQuery, 'query'), financeiroPorPaciente)
+router.get('/pacientes/:id', authenticate, authorize('ADMIN', 'SUPER_ADMIN'), validar(mesAnoQuery, 'query'), financeiroPacienteId)
 
 export default router

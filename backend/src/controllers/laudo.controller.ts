@@ -6,6 +6,8 @@ import { gerarPDFLaudoCompletoBuffer } from '../services/laudo-completo.service'
 import { gerarPDFLaudoReembolsoBuffer } from '../services/laudo-reembolso.service'
 import { gerarDeclaracaoSessoesBuffer } from '../services/declaracao-sessoes.service'
 import { getSupabase, STORAGE_BUCKET, baixarArquivo, removerArquivo } from '../lib/supabase'
+import { registrarAudit } from '../lib/audit'
+import { wherePaciente, whereLaudo, whereAgendamento } from '../lib/escopo'
 import logger from '../lib/logger'
 
 function formatarData(data: Date | string): string {
@@ -18,9 +20,19 @@ function formatarDataISO(data: Date | string): string {
     return d.toISOString().split('T')[0]
 }
 
+function formatarDataTratamento(valor: string): string {
+    // Guarda em ISO (YYYY-MM-DD, origem: input date ou criado_em do prontuário);
+    // exibe em formato brasileiro, como as demais datas do PDF.
+    if (/^\d{4}-\d{2}-\d{2}$/.test(valor)) {
+        const [ano, mes, dia] = valor.split('-')
+        return `${dia}/${mes}/${ano}`
+    }
+    return valor
+}
+
 const CAMPOS_EDITAVEIS_CLINICO = ['quadro_clinico', 'achados_exame', 'diagnostico_funcional', 'conclusao', 'cid', 'procedimentos', 'total_sessoes', 'frequencia_semanal'] as const
 
-const CAMPOS_EDITAVEIS_COMPLETO = [...CAMPOS_EDITAVEIS_CLINICO, 'cif_funcao', 'cif_estrutura', 'cif_atividade', 'cif_participacao', 'cif_contextual', 'metas_tratamento', 'criterios_alta', 'prognostico', 'escalas_adicionais'] as const
+const CAMPOS_EDITAVEIS_COMPLETO = [...CAMPOS_EDITAVEIS_CLINICO, 'cifs', 'metas_tratamento', 'criterios_alta', 'prognostico', 'escalas_adicionais'] as const
 
 const CAMPOS_EDITAVEIS_REEMBOLSO = [...CAMPOS_EDITAVEIS_CLINICO, 'medico_solicitante_crm', 'medico_solicitante_uf', 'codigo_tuss', 'codigos_tuss_adicionais', 'sessoes_autorizadas', 'sessoes_realizadas', 'periodo_tratamento_inicio', 'periodo_tratamento_fim', 'prognostico', 'justificativa_continuidade', 'valor_total'] as const
 
@@ -29,7 +41,7 @@ export async function criarLaudo(req: Request, res: Response) {
     const tipo = (req.query.tipo as string) || req.body.tipo || 'CLINICO'
 
     const paciente = await prisma.paciente.findFirst({
-        where: { id: paciente_id, profissional_id: req.profissionalId }
+        where: { id: paciente_id, ...wherePaciente(req), deleted_at: null }
     })
 
     if (!paciente) {
@@ -51,7 +63,7 @@ export async function criarLaudo(req: Request, res: Response) {
         orderBy: { criado_em: 'desc' },
     })
 
-    const conteudo: Record<string, unknown> = {
+    const conteudo = {
         quadro_clinico: prontuario.hda || 'Não informado',
         achados_exame: prontuario.avaliacao_fisica || 'Não informado',
         diagnostico_funcional: prontuario.diagnostico_fisio || 'Não informado',
@@ -72,11 +84,14 @@ export async function criarLaudo(req: Request, res: Response) {
         data: {
             paciente_id,
             profissional_id: req.profissionalId!,
+            clinica_id: paciente.clinica_id,
             tipo: tipo as 'CLINICO' | 'COMPLETO' | 'REEMBOLSO',
             conteudo,
             tipo_assinatura: req.body.tipo_assinatura || 'MANUSCRITA',
         }
     })
+
+    registrarAudit(req.profissionalId!, 'LAUDO_CRIADO', paciente_id, { tipo });
 
     return res.status(201).json(laudo)
 }
@@ -86,14 +101,14 @@ export async function listarLaudos(req: Request, res: Response) {
     const tipo = req.query.tipo as string | undefined
 
     const paciente = await prisma.paciente.findFirst({
-        where: { id: paciente_id, profissional_id: req.profissionalId }
+        where: { id: paciente_id, ...wherePaciente(req), deleted_at: null }
     })
 
     if (!paciente) {
         return res.status(404).json({ erro: 'Paciente não encontrado' })
     }
 
-    const where: Record<string, unknown> = { paciente_id, profissional_id: req.profissionalId }
+    const where: Record<string, unknown> = { paciente_id, ...whereLaudo(req) }
     if (tipo) where.tipo = tipo
 
     const laudos = await prisma.laudo.findMany({
@@ -116,7 +131,7 @@ export async function buscarLaudo(req: Request, res: Response) {
     const { id } = req.params
 
     const laudo = await prisma.laudo.findFirst({
-        where: { id, profissional_id: req.profissionalId },
+        where: { id, ...whereLaudo(req) },
         include: {
             paciente: {
                 select: { id: true, nome: true, data_nascimento: true }
@@ -128,6 +143,8 @@ export async function buscarLaudo(req: Request, res: Response) {
         return res.status(404).json({ erro: 'Laudo não encontrado' })
     }
 
+    registrarAudit(req.profissionalId!, 'LAUDO_VISUALIZADO', laudo.paciente_id)
+
     return res.json(laudo)
 }
 
@@ -136,8 +153,8 @@ export async function editarLaudo(req: Request, res: Response) {
     const { conteudo, tipo_assinatura } = req.body
 
     const laudo = await prisma.laudo.findFirst({
-        where: { id, profissional_id: req.profissionalId },
-        select: { tipo: true, conteudo: true }
+        where: { id, ...whereLaudo(req) },
+        select: { tipo: true, conteudo: true, paciente_id: true }
     })
 
     if (!laudo) {
@@ -156,7 +173,7 @@ export async function editarLaudo(req: Request, res: Response) {
     }
 
     const { count } = await prisma.laudo.updateMany({
-        where: { id, profissional_id: req.profissionalId },
+        where: { id, ...whereLaudo(req) },
         data: {
             conteudo: { ...(laudo.conteudo as object), ...conteudoEditado },
             ...(tipo_assinatura && { tipo_assinatura }),
@@ -167,11 +184,38 @@ export async function editarLaudo(req: Request, res: Response) {
         return res.status(404).json({ erro: 'Laudo não encontrado' })
     }
 
+    registrarAudit(req.profissionalId!, 'LAUDO_EDITADO', laudo.paciente_id, { laudo_id: id, tipo: laudo.tipo })
+
     const laudoAtualizado = await prisma.laudo.findFirst({
-        where: { id, profissional_id: req.profissionalId },
+        where: { id, ...whereLaudo(req) },
     })
 
     return res.json(laudoAtualizado)
+}
+
+export async function excluirLaudo(req: Request, res: Response) {
+    const { id } = req.params
+
+    const laudo = await prisma.laudo.findFirst({
+        where: { id, ...whereLaudo(req) },
+        select: { id: true, pdf_path: true, paciente_id: true, tipo: true },
+    })
+
+    if (!laudo) {
+        return res.status(404).json({ erro: 'Laudo não encontrado' })
+    }
+
+    if (laudo.pdf_path) {
+        return res.status(409).json({
+            erro: 'Este laudo já foi salvo como arquivo na clínica. Não é possível excluí-lo.',
+        })
+    }
+
+    await prisma.laudo.delete({ where: { id } })
+
+    registrarAudit(req.profissionalId!, 'LAUDO_EXCLUIDO', laudo.paciente_id, { laudo_id: id, tipo: laudo.tipo })
+
+    return res.json({ mensagem: 'Laudo excluído com sucesso' })
 }
 
 async function montarDadosLaudo(laudo: any) {
@@ -192,7 +236,8 @@ async function montarDadosLaudo(laudo: any) {
         diagnostico_medico: (conteudo.diagnostico_medico as string) || 'Não informado',
         medico_solicitante: (conteudo.medico_solicitante as string) || 'Não informado',
         cid: (conteudo.cid as string) || '',
-        data_inicio: (conteudo.data_inicio as string) || 'Não informado',
+        data_inicio: formatarDataTratamento((conteudo.data_inicio as string) || 'Não informado'),
+        data_fim: formatarDataTratamento((conteudo.data_fim as string) || ''),
         frequencia_semanal: (conteudo.frequencia_semanal as string) || 'Não informado',
         total_sessoes: (conteudo.total_sessoes as string) || '',
         quadro_clinico: (conteudo.quadro_clinico as string) || 'Não informado',
@@ -210,17 +255,42 @@ async function montarDadosLaudo(laudo: any) {
     }
 }
 
+function converterCifsLegado(c: Record<string, unknown>) {
+    const grupos: [string, string][] = [
+        ['cif_funcao', 'FUNCOES'],
+        ['cif_estrutura', 'ESTRUTURAS'],
+        ['cif_atividade', 'ATIVIDADES'],
+        ['cif_participacao', 'ATIVIDADES'],
+        ['cif_contextual', 'AMBIENTAIS'],
+    ]
+    const itens: { codigo: string; descricao: string; componente: string }[] = []
+    for (const [campo, componente] of grupos) {
+        const texto = typeof c[campo] === 'string' ? (c[campo] as string) : ''
+        const codigos = texto.match(/[bsde]\d{2,3}(?:\.\d+)?/gi) ?? []
+        for (const codigo of codigos) {
+            const cd = codigo.toLowerCase()
+            if (itens.some((i) => i.codigo === cd)) continue
+            itens.push({ codigo: cd, descricao: '', componente })
+        }
+    }
+    return itens
+}
+
 async function montarDadosLaudoCompleto(laudo: any) {
     const base = await montarDadosLaudo(laudo)
     const conteudo = laudo.conteudo as Record<string, unknown>
 
+    const cifs = Array.isArray(conteudo.cifs)
+        ? (conteudo.cifs as { codigo: string; descricao?: string; componente?: string }[]).map((i) => ({
+            codigo: i.codigo,
+            descricao: i.descricao ?? '',
+            componente: i.componente ?? 'ATIVIDADES',
+        }))
+        : converterCifsLegado(conteudo)
+
     return {
         ...base,
-        cif_funcao: (conteudo.cif_funcao as string) || '',
-        cif_estrutura: (conteudo.cif_estrutura as string) || '',
-        cif_atividade: (conteudo.cif_atividade as string) || '',
-        cif_participacao: (conteudo.cif_participacao as string) || '',
-        cif_contextual: (conteudo.cif_contextual as string) || '',
+        cifs,
         metas_tratamento: (conteudo.metas_tratamento as string) || '',
         criterios_alta: (conteudo.criterios_alta as string) || '',
         prognostico: (conteudo.prognostico as string) || '',
@@ -240,8 +310,8 @@ async function montarDadosLaudoReembolso(laudo: any) {
         codigos_tuss_adicionais: (conteudo.codigos_tuss_adicionais as any[]) || [],
         sessoes_autorizadas: (conteudo.sessoes_autorizadas as number | null) ?? null,
         sessoes_realizadas: (conteudo.sessoes_realizadas as number | null) ?? null,
-        periodo_tratamento_inicio: (conteudo.periodo_tratamento_inicio as string) || '',
-        periodo_tratamento_fim: (conteudo.periodo_tratamento_fim as string) || '',
+        periodo_tratamento_inicio: formatarDataTratamento((conteudo.periodo_tratamento_inicio as string) || ''),
+        periodo_tratamento_fim: formatarDataTratamento((conteudo.periodo_tratamento_fim as string) || ''),
         prognostico: (conteudo.prognostico as string) || '',
         justificativa_continuidade: (conteudo.justificativa_continuidade as string) || '',
         valor_total: (conteudo.valor_total as number | null) ?? null,
@@ -293,7 +363,7 @@ export async function gerarPDF(req: Request, res: Response) {
     const { id } = req.params
 
     const laudo = await prisma.laudo.findFirst({
-        where: { id, profissional_id: req.profissionalId },
+        where: { id, ...whereLaudo(req) },
         include: {
             paciente: { select: { nome: true, data_nascimento: true, id: true } },
             profissional: {
@@ -308,6 +378,8 @@ export async function gerarPDF(req: Request, res: Response) {
     if (!laudo) {
         return res.status(404).json({ erro: 'Laudo não encontrado' })
     }
+
+    registrarAudit(req.profissionalId!, 'LAUDO_PDF_GERADO', laudo.paciente_id, { laudo_id: id, tipo: laudo.tipo })
 
     if (laudo.pdf_path) {
         const bufferExistente = await baixarArquivo(laudo.pdf_path)
@@ -348,7 +420,7 @@ export async function gerarDeclaracaoSessoes(req: Request, res: Response) {
     const { id } = req.params
 
     const laudo = await prisma.laudo.findFirst({
-        where: { id, profissional_id: req.profissionalId, tipo: 'REEMBOLSO' },
+        where: { id, ...whereLaudo(req), tipo: 'REEMBOLSO' },
         include: {
             paciente: { select: { nome: true, cpf: true } },
             profissional: { select: { nome: true, crefito: true } },
@@ -362,7 +434,7 @@ export async function gerarDeclaracaoSessoes(req: Request, res: Response) {
     const sessoes = await prisma.agendamento.findMany({
         where: {
             paciente_id: laudo.paciente_id,
-            profissional_id: req.profissionalId,
+            ...whereAgendamento(req),
             status: 'COMPARECEU',
         },
         orderBy: { data: 'desc' },

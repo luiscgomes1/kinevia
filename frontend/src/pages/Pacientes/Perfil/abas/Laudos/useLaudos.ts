@@ -2,6 +2,37 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
 import api, { exibirErro } from '@/services/api'
 import type { Laudo, ConteudoLaudo } from './types'
+import {
+    buscarItemCIF,
+    componenteDoCodigo,
+    extrairCodsCIFDeTexto,
+    type ComponenteCIF,
+    type ItemCIF,
+} from './cifs-data'
+
+function converterCifsLegado(c: Record<string, unknown>): ItemCIF[] {
+    const grupos: [string, ComponenteCIF][] = [
+        ['cif_funcao', 'FUNCOES'],
+        ['cif_estrutura', 'ESTRUTURAS'],
+        ['cif_atividade', 'ATIVIDADES'],
+        ['cif_participacao', 'ATIVIDADES'],
+        ['cif_contextual', 'AMBIENTAIS'],
+    ]
+    const itens: ItemCIF[] = []
+    for (const [campo, componente] of grupos) {
+        const texto = typeof c[campo] === 'string' ? (c[campo] as string) : ''
+        for (const codigo of extrairCodsCIFDeTexto(texto)) {
+            if (itens.some((i) => i.codigo === codigo)) continue
+            const conhecido = buscarItemCIF(codigo)
+            itens.push({
+                codigo,
+                descricao: conhecido?.descricao ?? '',
+                componente: conhecido?.componente ?? componente,
+            })
+        }
+    }
+    return itens
+}
 
 export function useLaudos(pacienteId: string) {
     const [laudos, setLaudos] = useState<Laudo[]>([])
@@ -25,6 +56,7 @@ export function useLaudos(pacienteId: string) {
         eva_inicial: null,
         eva_atual: null,
         data_inicio: '',
+        data_fim: '',
         frequencia_semanal: '',
     })
     const [tipoAssinatura, setTipoAssinatura] = useState<'DIGITAL' | 'MANUSCRITA'>('MANUSCRITA')
@@ -49,7 +81,12 @@ export function useLaudos(pacienteId: string) {
         }
     }, [pacienteId])
 
-    useEffect(() => { carregar() }, [carregar])
+    useEffect(() => {
+        async function inicial() {
+            await carregar()
+        }
+        void inicial()
+    }, [carregar])
 
     async function handleGerarLaudo(tipo: 'CLINICO' | 'COMPLETO' | 'REEMBOLSO') {
         setGerando(true)
@@ -73,7 +110,7 @@ export function useLaudos(pacienteId: string) {
             const c = response.data.conteudo
             const tipo = response.data.tipo as 'CLINICO' | 'COMPLETO' | 'REEMBOLSO'
             setLaudoTipo(tipo)
-            setConteudo({
+            const novoConteudo: ConteudoLaudo = {
                 quadro_clinico: c.quadro_clinico ?? '',
                 achados_exame: c.achados_exame ?? '',
                 diagnostico_funcional: c.diagnostico_funcional ?? '',
@@ -86,13 +123,16 @@ export function useLaudos(pacienteId: string) {
                 eva_inicial: c.eva_inicial ?? null,
                 eva_atual: c.eva_atual ?? null,
                 data_inicio: c.data_inicio ?? '',
+                data_fim: c.data_fim ?? '',
                 frequencia_semanal: c.frequencia_semanal ?? '',
                 ...(tipo === 'COMPLETO' ? {
-                    cif_funcao: c.cif_funcao ?? '',
-                    cif_estrutura: c.cif_estrutura ?? '',
-                    cif_atividade: c.cif_atividade ?? '',
-                    cif_participacao: c.cif_participacao ?? '',
-                    cif_contextual: c.cif_contextual ?? '',
+                    cifs: Array.isArray(c.cifs) && (c.cifs as ItemCIF[]).length > 0
+                        ? (c.cifs as ItemCIF[]).map((i) => ({
+                            codigo: i.codigo,
+                            descricao: i.descricao ?? '',
+                            componente: i.componente ?? componenteDoCodigo(i.codigo),
+                        }))
+                        : converterCifsLegado(c),
                     metas_tratamento: c.metas_tratamento ?? '',
                     criterios_alta: c.criterios_alta ?? '',
                     prognostico: c.prognostico ?? '',
@@ -111,9 +151,10 @@ export function useLaudos(pacienteId: string) {
                     justificativa_continuidade: c.justificativa_continuidade ?? '',
                     valor_total: c.valor_total ?? null,
                 } : {}),
-            })
+            }
+            setConteudo(novoConteudo)
             setTipoAssinatura(response.data.tipo_assinatura)
-            conteudoInicialRef.current = JSON.stringify(c)
+            conteudoInicialRef.current = JSON.stringify(novoConteudo)
             assinaturaInicialRef.current = response.data.tipo_assinatura
             setLaudoEditando(laudoId)
             setModalAberto(true)
@@ -182,6 +223,16 @@ export function useLaudos(pacienteId: string) {
             .catch(() => toast.error('Erro ao baixar declaração.'))
     }
 
+    async function handleExcluirLaudo(laudoId: string) {
+        try {
+            await api.delete(`/laudos/${laudoId}`)
+            toast.success('Laudo excluído.')
+            carregar()
+        } catch (err) {
+            toast.error(exibirErro(err, 'Erro ao excluir laudo.'))
+        }
+    }
+
     return {
         laudos,
         carregando,
@@ -203,5 +254,6 @@ export function useLaudos(pacienteId: string) {
         handleSalvarEdicao,
         handleBaixarPDF,
         handleBaixarDeclaracao,
+        handleExcluirLaudo,
     }
 }

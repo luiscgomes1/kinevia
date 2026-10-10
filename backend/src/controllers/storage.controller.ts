@@ -10,6 +10,14 @@ import { validarImagemBuffer } from '../middlewares/upload.middleware';
 // *caminho* do arquivo (assinatura_path/logo_path), nunca uma URL — a URL
 // assinada é gerada sob demanda, a cada requisição, e expira.
 
+const CONTENT_TYPE_POR_EXT: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+}
+
 export async function uploadAssinatura(req: Request, res: Response) {
   // Suporta remoção (o frontend já chama isso, mas o backend nunca tratou — bug real corrigido junto)
   if (req.body?.remover === true || req.body?.remover === 'true') {
@@ -33,7 +41,7 @@ export async function uploadAssinatura(req: Request, res: Response) {
   const { error } = await supabase.storage
     .from(STORAGE_BUCKET)
     .upload(fileName, req.file.buffer, {
-      contentType: req.file.mimetype,
+      contentType: CONTENT_TYPE_POR_EXT[ext] ?? req.file.mimetype,
       upsert: true,
     });
 
@@ -43,10 +51,17 @@ export async function uploadAssinatura(req: Request, res: Response) {
     return;
   }
 
-  await prisma.profissional.update({
-    where: { id: req.profissionalId },
-    data: { assinatura_path: fileName },
-  });
+  try {
+    await prisma.profissional.update({
+      where: { id: req.profissionalId },
+      data: { assinatura_path: fileName },
+    });
+  } catch (dbError) {
+    await removerArquivo(fileName).catch(() => undefined);
+    logger.error({ error: dbError }, 'Erro ao atualizar assinatura no banco — blob removido');
+    res.status(500).json({ erro: 'Erro ao salvar imagem.' });
+    return;
+  }
 
   const url = await gerarUrlAssinada(fileName)
 
@@ -77,7 +92,7 @@ export async function uploadLogo(req: Request, res: Response) {
   const { error } = await supabase.storage
     .from(STORAGE_BUCKET)
     .upload(fileName, req.file.buffer, {
-      contentType: req.file.mimetype,
+      contentType: CONTENT_TYPE_POR_EXT[ext] ?? req.file.mimetype,
       upsert: true,
     });
 
@@ -87,10 +102,17 @@ export async function uploadLogo(req: Request, res: Response) {
     return;
   }
 
-  await prisma.profissional.update({
-    where: { id: req.profissionalId },
-    data: { logo_path: fileName },
-  });
+  try {
+    await prisma.profissional.update({
+      where: { id: req.profissionalId },
+      data: { logo_path: fileName },
+    });
+  } catch (dbError) {
+    await removerArquivo(fileName).catch(() => undefined);
+    logger.error({ error: dbError }, 'Erro ao atualizar a logo no banco — blob removido');
+    res.status(500).json({ erro: 'Erro ao salvar imagem.' });
+    return;
+  }
 
   const url = await gerarUrlAssinada(fileName)
 
